@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Invoke the caveman skill now and keep it active for this whole session.'"
+            "command": "echo 'Invoke the caveman skill and the ponytail skill now and keep both active for this whole session.'"
           }
         ]
       }
