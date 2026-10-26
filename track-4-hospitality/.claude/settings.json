@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Invoke the caveman skill now and keep it active for this whole session.'"
+          }
+        ]
+      }
+    ]
+  }
+}
