@@ -19,6 +19,7 @@ public class RoomType
     public string Name { get; set; } = "";
     public int MaxOccupancy { get; set; }
     public decimal BaseRate { get; set; }
+    public int SlaMinutes { get; set; } = 45;
 }
 
 public class RatePlan
@@ -48,16 +49,23 @@ public class Room
     public int RoomTypeId { get; set; }
     public string RoomNumber { get; set; } = "";
     public int Floor { get; set; }
-    public string Status { get; set; } = RoomStatuses.Clean;
+    public string Status { get; set; } = RoomStatuses.Ready;
     public string? Notes { get; set; }
+    public string? OooReason { get; set; }
+    public DateTime? OooSince { get; set; }
+    public DateTime? OooExpectedReturn { get; set; }
+    public bool SimpleTurn { get; set; }
+    public int RowVersion { get; set; } = 1;
 }
 
 public static class RoomStatuses
 {
-    public const string Clean = "Clean";
     public const string Dirty = "Dirty";
+    public const string Cleaning = "Cleaning";
+    public const string Inspected = "Inspected";
+    public const string Ready = "Ready";
     public const string OutOfOrder = "OutOfOrder";
-    public static readonly string[] All = { Clean, Dirty, OutOfOrder };
+    public static readonly string[] All = { Dirty, Cleaning, Inspected, Ready, OutOfOrder };
 }
 
 public class RoomStatusEvent
@@ -68,6 +76,37 @@ public class RoomStatusEvent
     public string ToStatus { get; set; } = "";
     public int? ChangedByUserId { get; set; }
     public DateTime ChangedAt { get; set; }
+    public string? Reason { get; set; }
+}
+
+public class RoomTurnaround
+{
+    public long Id { get; set; }
+    public int RoomId { get; set; }
+    public int? BookingId { get; set; }
+    public DateTime CheckoutAt { get; set; }
+    public DateTime? ReadyAt { get; set; }
+    public int TargetMinutes { get; set; }
+    public bool IsOpen { get; set; } = true;
+}
+
+public class FloorAssignment
+{
+    public int Id { get; set; }
+    public int HotelId { get; set; }
+    public int Floor { get; set; }
+    public int HousekeeperUserId { get; set; }
+    public bool Active { get; set; } = true;
+}
+
+public class RoomSpotCheck
+{
+    public long Id { get; set; }
+    public int RoomId { get; set; }
+    public long StatusHistoryId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? CheckedAt { get; set; }
+    public int? CheckedByUserId { get; set; }
 }
 
 public class User

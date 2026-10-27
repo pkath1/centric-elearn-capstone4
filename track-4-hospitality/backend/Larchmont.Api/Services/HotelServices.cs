@@ -104,6 +104,7 @@ public interface IRoomService
     Task<RoomDto> CreateAsync(RoomRequest request);
     Task<RoomDto> UpdateAsync(int id, RoomRequest request);
     Task<RoomDto> SetStatusAsync(int id, RoomStatusRequest request);
+    Task<RoomDto> SetOutOfOrderAsync(int id, OutOfOrderRequest request);
     Task<RoomAvailabilityDto> GetAvailabilityAsync(int id, DateOnly from, DateOnly to);
 }
 
@@ -149,7 +150,7 @@ public class RoomService : IRoomService
             RoomNumber = request.RoomNumber.Trim(),
             Floor = request.Floor,
             Notes = request.Notes,
-            Status = RoomStatuses.Clean
+            Status = RoomStatuses.Ready
         };
         await _rooms.AddAsync(room);
         return await ToDtoAsync(room);
@@ -187,6 +188,8 @@ public class RoomService : IRoomService
         await _rooms.SaveAsync();
         return await ToDtoAsync(room);
     }
+
+    public Task<RoomDto> SetOutOfOrderAsync(int id, OutOfOrderRequest request) => throw new NotImplementedException();
 
     public async Task<RoomAvailabilityDto> GetAvailabilityAsync(int id, DateOnly from, DateOnly to)
     {
