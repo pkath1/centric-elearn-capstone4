@@ -92,6 +92,9 @@ public class RoomsController : ControllerBase
     [HttpPut("{id:int}/status")]
     public async Task<ActionResult<RoomDto>> SetStatus(int id, RoomStatusRequest request) => await _rooms.SetStatusAsync(id, request);
 
+    [HttpPost("{id:int}/out-of-order")]
+    public async Task<ActionResult<RoomDto>> SetOutOfOrder(int id, OutOfOrderRequest request) => await _rooms.SetOutOfOrderAsync(id, request);
+
     [HttpGet("{id:int}/availability")]
     public async Task<ActionResult<RoomAvailabilityDto>> Availability(int id, [FromQuery] DateOnly from, [FromQuery] DateOnly to) =>
         await _rooms.GetAvailabilityAsync(id, from, to);

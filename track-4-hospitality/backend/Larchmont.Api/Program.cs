@@ -28,6 +28,9 @@ builder.Services.AddScoped<IGuestRepository, GuestRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IRateRepository, RateRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRoomTurnaroundRepository, RoomTurnaroundRepository>();
+builder.Services.AddScoped<IFloorAssignmentRepository, FloorAssignmentRepository>();
+builder.Services.AddScoped<IRoomSpotCheckRepository, RoomSpotCheckRepository>();
 
 builder.Services.AddScoped<IClock, SystemClock>();
 builder.Services.AddScoped<IRoomStatusPolicy, RoomStatusPolicy>();
