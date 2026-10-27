@@ -1,4 +1,5 @@
 using FluentValidation;
+using Larchmont.Api.Domain;
 using Larchmont.Api.Dtos;
 
 namespace Larchmont.Api.Validators;
@@ -101,7 +102,71 @@ public class UserRequestValidator : AbstractValidator<UserRequest>
     {
         RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(200);
         RuleFor(x => x.DisplayName).NotEmpty().MaximumLength(120);
-        RuleFor(x => x.Role).Must(r => new[] { "Admin", "RoomsDirector", "Manager", "FrontDesk", "Housekeeper" }.Contains(r)).WithMessage("Unknown role.");
+        RuleFor(x => x.Role).Must(r => new[] { "Admin", "RoomsDirector", "Manager", "FrontDesk", "Housekeeper", "Supervisor", "Maintenance" }.Contains(r)).WithMessage("Unknown role.");
         RuleFor(x => x.Password).MinimumLength(10);
+    }
+}
+
+// Status membership is not checked here: an unknown status is a 422 from the service (AC-40).
+public class RoomStatusRequestValidator : AbstractValidator<RoomStatusRequest>
+{
+    public RoomStatusRequestValidator()
+    {
+        RuleFor(x => x.ChangedByUserId).NotNull().GreaterThan(0);
+        RuleFor(x => x.RowVersion).NotNull().GreaterThan(0);
+        RuleFor(x => x.Reason).MaximumLength(255);
+        When(x => x.Status == RoomStatuses.OutOfOrder, () =>
+        {
+            RuleFor(x => x.Reason).Must(r => !string.IsNullOrWhiteSpace(r)).WithMessage("Reason is required when status is OutOfOrder.");
+        });
+    }
+}
+
+public class OutOfOrderRequestValidator : AbstractValidator<OutOfOrderRequest>
+{
+    public OutOfOrderRequestValidator()
+    {
+        RuleFor(x => x.ChangedByUserId).GreaterThan(0);
+        RuleFor(x => x.RowVersion).GreaterThan(0);
+        RuleFor(x => x.Reason).Must(r => !string.IsNullOrWhiteSpace(r)).WithMessage("Reason is required.").MaximumLength(255);
+    }
+}
+
+public class FloorAssignmentRequestValidator : AbstractValidator<FloorAssignmentRequest>
+{
+    public FloorAssignmentRequestValidator()
+    {
+        RuleFor(x => x.Floor).InclusiveBetween(0, 60);
+        RuleFor(x => x.HousekeeperUserId).GreaterThan(0);
+    }
+}
+
+public class SetFloorAssignmentsRequestValidator : AbstractValidator<SetFloorAssignmentsRequest>
+{
+    public SetFloorAssignmentsRequestValidator()
+    {
+        RuleFor(x => x.ChangedByUserId).GreaterThan(0);
+        RuleFor(x => x.Assignments).NotNull();
+        RuleForEach(x => x.Assignments).SetValidator(new FloorAssignmentRequestValidator());
+        RuleFor(x => x.Assignments)
+            .Must(list => list == null || list.Select(a => a.Floor).Distinct().Count() == list.Count)
+            .WithMessage("Each floor may appear only once.");
+    }
+}
+
+public class SpotCheckRequestValidator : AbstractValidator<SpotCheckRequest>
+{
+    public SpotCheckRequestValidator()
+    {
+        RuleFor(x => x.ChangedByUserId).GreaterThan(0);
+    }
+}
+
+public class LockCheckoutRequestValidator : AbstractValidator<LockCheckoutRequest>
+{
+    public LockCheckoutRequestValidator()
+    {
+        RuleFor(x => x.HotelId).GreaterThan(0);
+        RuleFor(x => x.RoomNumber).NotEmpty().MaximumLength(10);
     }
 }

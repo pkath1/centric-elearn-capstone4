@@ -10,7 +10,7 @@ public record RoomTypeRequest(string Code, string Name, int MaxOccupancy, decima
 
 public record RoomDto(int Id, int HotelId, int RoomTypeId, string RoomTypeName, string RoomNumber, int Floor, string Status, string? Notes);
 public record RoomRequest(int HotelId, int RoomTypeId, string RoomNumber, int Floor, string? Notes);
-public record RoomStatusRequest(string Status, int? ChangedByUserId);
+public record RoomStatusRequest(string Status, int? ChangedByUserId, int? RowVersion = null, string? Reason = null);
 public record RoomAvailabilityDto(int RoomId, DateOnly From, DateOnly To, bool Available, IReadOnlyList<string> ConflictingBookings);
 
 public record GuestDto(int Id, string FirstName, string LastName, string Email, string Phone, string AddressLine, string City, string Postcode, string Country, string Region, string LoyaltyTier, DateTime CreatedAt);
