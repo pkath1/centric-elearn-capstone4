@@ -18,6 +18,9 @@ public class LarchmontDbContext : DbContext
     public DbSet<Guest> Guests => Set<Guest>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<BookingNote> BookingNotes => Set<BookingNote>();
+    public DbSet<RoomTurnaround> RoomTurnarounds => Set<RoomTurnaround>();
+    public DbSet<FloorAssignment> FloorAssignments => Set<FloorAssignment>();
+    public DbSet<RoomSpotCheck> RoomSpotChecks => Set<RoomSpotCheck>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -57,6 +60,8 @@ public class LarchmontDbContext : DbContext
             e.Property(x => x.RoomNumber).HasMaxLength(10);
             e.Property(x => x.Status).HasMaxLength(20);
             e.Property(x => x.Notes).HasMaxLength(255);
+            e.Property(x => x.OooReason).HasMaxLength(255);
+            e.Property(x => x.RowVersion).IsConcurrencyToken();
             e.HasIndex(x => new { x.HotelId, x.RoomNumber }).IsUnique();
         });
         b.Entity<RoomStatusEvent>(e =>
@@ -64,6 +69,23 @@ public class LarchmontDbContext : DbContext
             e.ToTable("room_status_history");
             e.Property(x => x.FromStatus).HasMaxLength(20);
             e.Property(x => x.ToStatus).HasMaxLength(20);
+            e.Property(x => x.Reason).HasMaxLength(255);
+        });
+        b.Entity<RoomTurnaround>(e =>
+        {
+            e.ToTable("room_turnarounds");
+            e.HasIndex(x => new { x.RoomId, x.CheckoutAt });
+        });
+        b.Entity<FloorAssignment>(e =>
+        {
+            e.ToTable("floor_assignments");
+            e.HasIndex(x => x.HousekeeperUserId);
+        });
+        b.Entity<RoomSpotCheck>(e =>
+        {
+            e.ToTable("room_spot_checks");
+            e.HasIndex(x => x.StatusHistoryId).IsUnique();
+            e.HasIndex(x => new { x.RoomId, x.CheckedAt });
         });
         b.Entity<User>(e =>
         {

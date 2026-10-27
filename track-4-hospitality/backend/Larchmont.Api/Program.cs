@@ -29,6 +29,12 @@ builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IRateRepository, RateRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
+builder.Services.AddScoped<IClock, SystemClock>();
+builder.Services.AddScoped<IRoomStatusPolicy, RoomStatusPolicy>();
+builder.Services.AddScoped<IHousekeepingBoardService, HousekeepingBoardService>();
+builder.Services.AddScoped<IFloorAssignmentService, FloorAssignmentService>();
+builder.Services.AddScoped<ILockIntegrationService, LockIntegrationService>();
+
 builder.Services.AddScoped<IHotelService, HotelService>();
 builder.Services.AddScoped<IRoomTypeService, RoomTypeService>();
 builder.Services.AddScoped<IRoomService, RoomService>();
