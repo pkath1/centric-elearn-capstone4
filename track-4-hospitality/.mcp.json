@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "larchmont-db": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "mcp/Larchmont.Mcp", "-v", "q"],
+      "env": {
+        "LARCHMONT_MCP_CONNECTION": "${LARCHMONT_MCP_CONNECTION}",
+        "LARCHMONT_MCP_HOTEL_ID": "${LARCHMONT_MCP_HOTEL_ID}"
+      }
+    }
+  }
+}
