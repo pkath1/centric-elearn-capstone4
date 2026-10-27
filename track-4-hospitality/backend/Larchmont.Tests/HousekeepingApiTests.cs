@@ -110,6 +110,25 @@ public class HousekeepingApiTests
     }
 
     [Fact]
+    public async Task AC_45_LockEventMovesOpenStampEarlier()
+    {
+        using var f = new HousekeepingFactory();
+        f.SeedHousekeeping(NewRoom(101, "101", 1, RoomStatuses.Dirty));
+        f.Seed(db => db.RoomTurnarounds.Add(new RoomTurnaround { Id = 1, RoomId = 101, CheckoutAt = At(10, 20), TargetMinutes = 45, IsOpen = true }));
+        var client = f.CreateClient();
+
+        // Given an open turnaround stamped 10:20. When a lock event for 10:00 arrives, then one for 10:10.
+        var earlier = await LockCheckout(client, HousekeepingFactory.LockKey, new { hotelId = 1, roomNumber = "101", checkedOutAt = At(10) });
+        Assert.Equal(HttpStatusCode.OK, earlier.StatusCode);
+        var later = await LockCheckout(client, HousekeepingFactory.LockKey, new { hotelId = 1, roomNumber = "101", checkedOutAt = At(10, 10) });
+        Assert.Equal(HttpStatusCode.OK, later.StatusCode);
+
+        // Then the stamp is 10:00 (never moved later), and exactly one history row records the move.
+        Assert.Equal(At(10), f.Query(db => db.RoomTurnarounds.Single(t => t.RoomId == 101)).CheckoutAt);
+        Assert.Equal(1, f.Query(db => db.RoomStatusHistory.Count(h => h.RoomId == 101 && h.Reason == "LockCheckoutStampMovedEarlier")));
+    }
+
+    [Fact]
     public async Task AC_33_FloorAssignmentNeedsHotelHousekeeper()
     {
         using var f = new HousekeepingFactory();

@@ -11,6 +11,7 @@ namespace Larchmont.Api.Services;
 public class LockIntegrationService : ILockIntegrationService
 {
     public const string LockReason = "LockCheckout";
+    public const string StampMovedReason = "LockCheckoutStampMovedEarlier";
     private const int MaxRoomNumberLength = 10;
 
     private readonly IHotelRepository _hotels;
@@ -58,6 +59,15 @@ public class LockIntegrationService : ILockIntegrationService
         }
         else if (lockTime < open.CheckoutAt)
         {
+            // Option A (user decision): the lock event may move an open stamp earlier, and the move is recorded.
+            await _rooms.AddStatusEventAsync(new RoomStatusEvent
+            {
+                RoomId = room.Id,
+                FromStatus = room.Status,
+                ToStatus = room.Status,
+                ChangedAt = now,
+                Reason = StampMovedReason
+            });
             open.CheckoutAt = lockTime;
         }
 

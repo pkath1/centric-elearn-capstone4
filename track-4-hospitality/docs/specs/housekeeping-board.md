@@ -232,6 +232,7 @@ Times below are UTC on 27 October 2026 unless stated. Each criterion maps to one
 - AC-42 Given a room on the spot-check list, When a Supervisor calls `POST /api/rooms/{id}/spot-check`, Then the response is 200 and the room no longer appears in `GET /api/hotels/{id}/spot-checks`.
 - AC-43 Given hotel 1 with 20 rooms, 2 of them OutOfOrder, and 70 room nights sold over 7 days, When `GET /api/reports/occupancy?hotelId=1` is called for those 7 days, Then `roomsAvailable` is 18 per day and `occupancyPct` is 55.6, and `roomsOutOfOrder` is 2.
 - AC-44 Given an Inspected room, When a FrontDesk user sets status Ready, Then the response is 403 and the room stays Inspected.
+- AC-45 Given room 101 has an open turnaround with checkout stamp 10:20, When the lock checkout webhook is called for room 101 with `checkedOutAt` 10:00, Then the stamp becomes 10:00, a history row with reason `LockCheckoutStampMovedEarlier` exists, and a second call with `checkedOutAt` 10:10 leaves the stamp at 10:00.
 
 ## Assumptions & Open Questions
 
@@ -240,7 +241,7 @@ Times below are UTC on 27 October 2026 unless stated. Each criterion maps to one
 - **Stack.** The spec follows the code: MVC controllers, EF Core on MySQL, DbUp migrations, FluentValidation. The top-level `track-4-hospitality/CLAUDE.md` describes minimal APIs, Dapper and SQL Server, which does not match the repo. The project CLAUDE.md also names `src/Larchmont.Web`, which does not exist. The code is treated as correct for this spec.
 - **Timestamps.** Stored as UTC, as the code already does (`DateTime.UtcNow`). The root CLAUDE.md says "local hotel time", which conflicts. Times in the UI are shown in the browser's local time. Stay dates are unaffected.
 - **Simple turn (Q1).** A room is a simple turn when its room type is Standard Double (STD), Standard Twin (TWN) or Superior Double (SUP) and it was not released from OutOfOrder. simple_turn is set when the room moves from Dirty to Cleaning.
-- **Checkout stamp.** Stored once, at the first of the lock event time or the desk check-out time. Not recalculated afterwards.
+- **Checkout stamp.** Set by the first signal (lock event or desk check-out). A later lock event may move it EARLIER while the turnaround is still open (decided by the user, option A); it never moves later, and each move writes a status history row with reason `LockCheckoutStampMovedEarlier`. Once the room is Ready the stamp is fixed.
 - **Existing rooms.** Rooms with status Clean become Ready in V005. Rooms are not re-inspected.
 - **Ready-by when overdue.** Now plus 15 minutes, flagged overdue.
 - **Board refresh.** Polling every 15 seconds. No push channel.
@@ -321,3 +322,4 @@ Brief quotes are shortened. Test names follow `AC_nn_<Behaviour>`.
 | "the supervisors cannot be everywhere" (spot-check of shortcuts) | BR-06 | AC-42 | POST /api/rooms/{id}/spot-check; GET /api/hotels/{id}/spot-checks | AC_42_SupervisorSpotCheckClearsList |
 | "The Monday occupancy report looks wrong to me." (out-of-order share) | BR-20 | AC-43 | GET /api/reports/occupancy | AC_43_OutOfOrderRoomsLeaveCapacity |
 | "nothing goes to Ready without a supervisor inspection" (front desk cannot set Ready) | BR-11 | AC-44 | PUT /api/rooms/{id}/status | AC_44_FrontDeskCannotSetReady |
+| "The clock should start when the guest leaves." (lock event earlier than desk) | BR-18 | AC-45 | POST /api/integrations/lock/checkout | AC_45_LockEventMovesOpenStampEarlier |
