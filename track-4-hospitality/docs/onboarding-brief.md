@@ -30,7 +30,7 @@ Supporting folders: `Dtos/` (request and response records), `Mappers/` (entity t
 
 Defined in `Domain/Entities.cs`. Tables and columns come from `Data/LarchmontDbContext.cs`, which maps names to snake_case.
 
-- **Room** (`rooms`): `HotelId`, `RoomTypeId`, `RoomNumber`, `Floor`, `Status`, `Notes`. `Status` is one of `Clean`, `Dirty`, `OutOfOrder` (`RoomStatuses`). The unique key is (hotel, room number).
+- **Room** (`rooms`): `HotelId`, `RoomTypeId`, `RoomNumber`, `Floor`, `Status`, `Notes`. `Status` is one of `Dirty`, `Cleaning`, `Inspected`, `Ready`, `OutOfOrder` (`RoomStatuses`, widened in V005). The unique key is (hotel, room number).
 - **RoomStatusEvent** (`room_status_history`): one row per status change, with `FromStatus`, `ToStatus`, `ChangedByUserId`, and `ChangedAt`.
 - **Booking** (`bookings`): reference, channel, hotel, guest, room type, optional room, rate plan, `CheckIn` and `CheckOut` (`DateOnly`), adults, status (`BookingStatuses`), total amount. `Nights` is calculated and not stored.
 - **User** (`users`): email (unique), display name, role, optional hotel, password hash, active flag, last login.
@@ -38,9 +38,9 @@ Defined in `Domain/Entities.cs`. Tables and columns come from `Data/LarchmontDbC
 
 ## Migrations
 
-- Scripts live in `backend/db/migrations`: `V001__create_schema.sql`, `V002__reference_data.sql`, `V003__seed_rooms_guests_staff.sql`, `V004__seed_bookings.sql`.
+- Scripts live in `backend/db/migrations`: `V001__create_schema.sql`, `V002__reference_data.sql`, `V003__seed_rooms_guests_staff.sql`, `V004__seed_bookings.sql`, `V005__housekeeping_board.sql`.
 - The csproj embeds `..\db\migrations\*.sql` as resources. DbUp runs them in filename order at startup.
-- V001 to V004 are applied. Do not edit them. The next file is V005.
+- V001 to V005 are applied. Do not edit them. The next file is V006.
 
 ## Tests
 

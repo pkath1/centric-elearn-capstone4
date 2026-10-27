@@ -24,7 +24,7 @@ Paths below are relative to this folder (`track-4-hospitality/`), which holds `.
 - `backend/Larchmont.Api/Domain/Entities.cs` - entities (Room, Booking, User, and others)
 - `backend/Larchmont.Api/Data/LarchmontDbContext.cs` - table and column mapping (snake_case)
 - `backend/Larchmont.Api/Validators`, `Dtos`, `Mappers`, `Infrastructure` (exceptions, password hashing)
-- `backend/db/migrations` - DbUp scripts V001 to V004 (applied; never edit)
+- `backend/db/migrations` - DbUp scripts V001 to V005 (applied; never edit). The next file is V006
 - `frontend/src` - `api/` (fetch helpers), `pages/`, `components/`, `hooks/`
 
 ## Conventions
@@ -33,7 +33,7 @@ Paths below are relative to this folder (`track-4-hospitality/`), which holds `.
 - Services use repositories, not `LarchmontDbContext` directly.
 - Repositories and services are registered by hand in `Program.cs`. Add new ones there.
 - Timestamps use UTC (`DateTime.UtcNow`). Stay dates are `DateOnly` with no timezone.
-- Migrations: never edit V001 to V004. The next file is V005. See `.claude/rules/migrations.md`.
+- Migrations: never edit V001 to V005. The next file is V006. See `.claude/rules/migrations.md`.
 
 ## Known issues
 - CI (`.github/workflows/ci.yml`) is broken: it installs .NET 6 (project is net8.0) and uses `working-directory: web` (the folder is `frontend`). Not fixed yet.
