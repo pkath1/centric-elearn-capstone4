@@ -9,6 +9,53 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/pre-edit-guard.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-edit-build.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/post-commit-reminder.sh\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Bash(mysql*INSERT*)",
+      "Bash(mysql*DROP*)",
+      "Bash(mysql*DELETE*)",
+      "Bash(mysql*UPDATE*)",
+      "Bash(mysql*ALTER*)",
+      "Bash(mysql*insert*)",
+      "Bash(mysql*drop*)",
+      "Bash(mysql*delete*)",
+      "Bash(mysql*update*)",
+      "Bash(mysql*alter*)",
+      "Bash(mysql*-u root*)",
+      "Bash(mysql*-uroot*)"
     ]
   }
 }
