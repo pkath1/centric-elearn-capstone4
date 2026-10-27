@@ -35,7 +35,8 @@ public static class RoomTypeMapper
 public static class RoomMapper
 {
     public static RoomDto ToDto(this Room r, string roomTypeName) =>
-        new(r.Id, r.HotelId, r.RoomTypeId, roomTypeName, r.RoomNumber, r.Floor, r.Status, r.Notes);
+        new(r.Id, r.HotelId, r.RoomTypeId, roomTypeName, r.RoomNumber, r.Floor, r.Status, r.Notes,
+            r.RowVersion, r.SimpleTurn, r.OooReason, r.OooSince, r.OooExpectedReturn);
 }
 
 public static class GuestMapper

@@ -45,11 +45,13 @@ public class ReportService : IReportService
             days.Add(new OccupancyDayDto(day, sold));
         }
 
-        var rooms = await _rooms.CountForHotelAsync(hotelId);
+        // BR-20: out-of-order rooms are not available, so they leave the capacity; they are reported separately.
+        var rooms = await _rooms.CountAvailableForHotelAsync(hotelId);
+        var outOfOrder = await _rooms.CountOutOfOrderForHotelAsync(hotelId);
         var nightsSold = days.Sum(d => d.RoomsSold);
         var capacity = rooms * days.Count;
         var pct = capacity == 0 ? 0m : Math.Round(100m * nightsSold / capacity, 1);
-        return new OccupancyReportDto(hotelId, from, to, rooms, nightsSold, pct, days);
+        return new OccupancyReportDto(hotelId, from, to, rooms, nightsSold, pct, days, outOfOrder);
     }
 
     public async Task<List<ArrivalDto>> GetArrivalsAsync(DateOnly date, int? hotelId)

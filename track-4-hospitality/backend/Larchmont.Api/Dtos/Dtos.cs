@@ -8,9 +8,9 @@ public record HotelRequest(string Code, string Name, string City, string Region,
 public record RoomTypeDto(int Id, string Code, string Name, int MaxOccupancy, decimal BaseRate);
 public record RoomTypeRequest(string Code, string Name, int MaxOccupancy, decimal BaseRate);
 
-public record RoomDto(int Id, int HotelId, int RoomTypeId, string RoomTypeName, string RoomNumber, int Floor, string Status, string? Notes);
+public record RoomDto(int Id, int HotelId, int RoomTypeId, string RoomTypeName, string RoomNumber, int Floor, string Status, string? Notes, int RowVersion, bool SimpleTurn, string? OooReason, DateTime? OooSince, DateTime? OooExpectedReturn);
 public record RoomRequest(int HotelId, int RoomTypeId, string RoomNumber, int Floor, string? Notes);
-public record RoomStatusRequest(string Status, int? ChangedByUserId);
+public record RoomStatusRequest(string Status, int? ChangedByUserId, int? RowVersion = null, string? Reason = null);
 public record RoomAvailabilityDto(int RoomId, DateOnly From, DateOnly To, bool Available, IReadOnlyList<string> ConflictingBookings);
 
 public record GuestDto(int Id, string FirstName, string LastName, string Email, string Phone, string AddressLine, string City, string Postcode, string Country, string Region, string LoyaltyTier, DateTime CreatedAt);
@@ -34,7 +34,7 @@ public record UserRequest(string Email, string DisplayName, string Role, int? Ho
 public record UserUpdateRequest(string DisplayName, string Role, int? HotelId, bool Active, string? Phone);
 
 public record OccupancyDayDto(DateOnly Date, int RoomsSold);
-public record OccupancyReportDto(int? HotelId, DateOnly From, DateOnly To, int RoomsAvailable, int RoomNightsSold, decimal OccupancyPct, IReadOnlyList<OccupancyDayDto> Days);
+public record OccupancyReportDto(int? HotelId, DateOnly From, DateOnly To, int RoomsAvailable, int RoomNightsSold, decimal OccupancyPct, IReadOnlyList<OccupancyDayDto> Days, int RoomsOutOfOrder);
 public record ArrivalDto(int BookingId, string Reference, string HotelName, string GuestName, string RoomTypeName, string? RoomNumber, int Nights, string Status);
 public record RevenueRowDto(int HotelId, string HotelName, int Bookings, decimal Revenue);
 

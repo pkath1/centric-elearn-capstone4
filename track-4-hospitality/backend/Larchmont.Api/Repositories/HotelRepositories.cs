@@ -1,5 +1,6 @@
 using Larchmont.Api.Data;
 using Larchmont.Api.Domain;
+using Larchmont.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 namespace Larchmont.Api.Repositories;
@@ -50,10 +51,17 @@ public interface IRoomRepository
 {
     Task<List<Room>> ListAsync(int? hotelId, string? status, int? floor);
     Task<Room?> GetAsync(int id);
-    Task<int> CountForHotelAsync(int? hotelId);
+    Task<Room?> GetByNumberAsync(int hotelId, string roomNumber);
+    Task<int> CountAvailableForHotelAsync(int? hotelId);
+    Task<int> CountOutOfOrderForHotelAsync(int? hotelId);
     Task AddAsync(Room room);
     Task AddStatusEventAsync(RoomStatusEvent ev);
+    Task<RoomStatusEvent?> GetLastEntryAsync(int roomId, string toStatus);
+    Task AddTurnaroundAsync(RoomTurnaround turnaround);
+    Task<RoomTurnaround?> GetOpenTurnaroundAsync(int roomId);
+    Task AddSpotCheckAsync(RoomSpotCheck spotCheck);
     Task SaveAsync();
+    Task SaveChangedAsync(Room room);
 }
 
 public class RoomRepository : IRoomRepository
@@ -72,10 +80,50 @@ public class RoomRepository : IRoomRepository
 
     public Task<Room?> GetAsync(int id) => _db.Rooms.FirstOrDefaultAsync(r => r.Id == id);
 
-    public Task<int> CountForHotelAsync(int? hotelId) =>
-        hotelId.HasValue ? _db.Rooms.CountAsync(r => r.HotelId == hotelId) : _db.Rooms.CountAsync();
+    public Task<Room?> GetByNumberAsync(int hotelId, string roomNumber) =>
+        _db.Rooms.FirstOrDefaultAsync(r => r.HotelId == hotelId && r.RoomNumber == roomNumber);
+
+    // BR-20: out-of-order rooms are not available for sale, so they leave the capacity.
+    public Task<int> CountAvailableForHotelAsync(int? hotelId)
+    {
+        var q = _db.Rooms.Where(r => r.Status != RoomStatuses.OutOfOrder);
+        if (hotelId.HasValue) q = q.Where(r => r.HotelId == hotelId);
+        return q.CountAsync();
+    }
+
+    public Task<int> CountOutOfOrderForHotelAsync(int? hotelId)
+    {
+        var q = _db.Rooms.Where(r => r.Status == RoomStatuses.OutOfOrder);
+        if (hotelId.HasValue) q = q.Where(r => r.HotelId == hotelId);
+        return q.CountAsync();
+    }
 
     public async Task AddAsync(Room room) { _db.Rooms.Add(room); await _db.SaveChangesAsync(); }
     public Task AddStatusEventAsync(RoomStatusEvent ev) { _db.RoomStatusHistory.Add(ev); return Task.CompletedTask; }
+
+    public Task<RoomStatusEvent?> GetLastEntryAsync(int roomId, string toStatus) =>
+        _db.RoomStatusHistory.Where(e => e.RoomId == roomId && e.ToStatus == toStatus)
+            .OrderByDescending(e => e.Id).FirstOrDefaultAsync();
+
+    public Task AddTurnaroundAsync(RoomTurnaround turnaround) { _db.RoomTurnarounds.Add(turnaround); return Task.CompletedTask; }
+
+    public Task<RoomTurnaround?> GetOpenTurnaroundAsync(int roomId) =>
+        _db.RoomTurnarounds.FirstOrDefaultAsync(t => t.RoomId == roomId && t.IsOpen);
+
+    public Task AddSpotCheckAsync(RoomSpotCheck spotCheck) { _db.RoomSpotChecks.Add(spotCheck); return Task.CompletedTask; }
+
     public Task SaveAsync() => _db.SaveChangesAsync();
+
+    // Two writes of the same room in parallel: the row_version token catches the second one (BR-19).
+    public async Task SaveChangedAsync(Room room)
+    {
+        try
+        {
+            await _db.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException($"Room {room.RoomNumber} changed. Reload and try again.");
+        }
+    }
 }
