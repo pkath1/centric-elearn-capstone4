@@ -50,6 +50,9 @@ public class ApiExceptionHandler : IExceptionHandler
             case BusinessRuleException br:
                 problem = new ProblemDetails { Status = 422, Title = "Rule violated", Detail = br.Message };
                 break;
+            case ForbiddenException fb:
+                problem = new ProblemDetails { Status = 403, Title = "Forbidden", Detail = fb.Message };
+                break;
             default:
                 _logger.LogError(exception, "Unhandled error on {Path}", context.Request.Path);
                 problem = new ProblemDetails { Status = 500, Title = "Unexpected error" };

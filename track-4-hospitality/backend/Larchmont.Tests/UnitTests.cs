@@ -47,9 +47,16 @@ public class BookingServiceTests
     private readonly Mock<IRoomTypeRepository> _types = new();
     private readonly Mock<IRoomRepository> _rooms = new();
     private readonly Mock<IRateRepository> _rates = new();
+    private readonly Mock<IClock> _clock = new();
+    private static readonly DateTime FixedNow = new(2026, 10, 27, 12, 0, 0, DateTimeKind.Utc);
 
-    private BookingService Sut() => new(_bookings.Object, _guests.Object, _hotels.Object, _types.Object, _rooms.Object,
-        _rates.Object, new BookingRequestValidator(), new BookingUpdateRequestValidator(), new BookingNoteRequestValidator());
+    private BookingService Sut()
+    {
+        _clock.SetupGet(c => c.UtcNow).Returns(FixedNow);
+        return new(_bookings.Object, _guests.Object, _hotels.Object, _types.Object, _rooms.Object,
+            _rates.Object, new BookingRequestValidator(), new BookingUpdateRequestValidator(), new BookingNoteRequestValidator(),
+            _clock.Object);
+    }
 
     private static Booking ConfirmedBooking(DateOnly checkIn, int nights = 2) => new()
     {
@@ -68,7 +75,7 @@ public class BookingServiceTests
     [Fact]
     public async Task Cancel_TwoDaysBeforeArrival_HasNoFee()
     {
-        var booking = ConfirmedBooking(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2)));
+        var booking = ConfirmedBooking(DateOnly.FromDateTime(FixedNow.AddDays(2)));
         _bookings.Setup(b => b.GetAsync(7)).ReturnsAsync(booking);
         var result = await Sut().CancelAsync(7);
         Assert.Equal(0m, result.FeeAmount);
@@ -78,7 +85,7 @@ public class BookingServiceTests
     [Fact]
     public async Task Cancel_OnArrivalDay_ChargesFirstNight()
     {
-        var booking = ConfirmedBooking(DateOnly.FromDateTime(DateTime.Now));
+        var booking = ConfirmedBooking(DateOnly.FromDateTime(FixedNow));
         _bookings.Setup(b => b.GetAsync(7)).ReturnsAsync(booking);
         var result = await Sut().CancelAsync(7);
         Assert.Equal(100m, result.FeeAmount);
@@ -157,7 +164,8 @@ public class ReportServiceTests
     public async Task Occupancy_WithNoBookings_IsZeroPercent()
     {
         _bookings.Setup(b => b.ListOverlappingAsync(null, It.IsAny<DateOnly>(), It.IsAny<DateOnly>())).ReturnsAsync(new List<Booking>());
-        _rooms.Setup(r => r.CountForHotelAsync(null)).ReturnsAsync(120);
+        _rooms.Setup(r => r.CountAvailableForHotelAsync(null)).ReturnsAsync(120);
+        _rooms.Setup(r => r.CountOutOfOrderForHotelAsync(null)).ReturnsAsync(0);
         var report = await Sut().GetOccupancyAsync(null, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7));
         Assert.Equal(0m, report.OccupancyPct);
         Assert.Equal(7, report.Days.Count);

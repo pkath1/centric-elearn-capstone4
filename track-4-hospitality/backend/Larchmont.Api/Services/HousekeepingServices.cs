@@ -36,8 +36,3 @@ public interface ILockIntegrationService
 {
     Task<LockCheckoutResultDto> CheckoutAsync(LockCheckoutRequest request);
 }
-
-public class LockIntegrationService : ILockIntegrationService
-{
-    public Task<LockCheckoutResultDto> CheckoutAsync(LockCheckoutRequest request) => throw new NotImplementedException();
-}

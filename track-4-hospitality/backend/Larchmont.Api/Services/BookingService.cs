@@ -33,11 +33,12 @@ public class BookingService : IBookingService
     private readonly IValidator<BookingRequest> _validator;
     private readonly IValidator<BookingUpdateRequest> _updateValidator;
     private readonly IValidator<BookingNoteRequest> _noteValidator;
+    private readonly IClock _clock;
 
     public BookingService(IBookingRepository bookings, IGuestRepository guests, IHotelRepository hotels,
         IRoomTypeRepository types, IRoomRepository rooms, IRateRepository rates,
         IValidator<BookingRequest> validator, IValidator<BookingUpdateRequest> updateValidator,
-        IValidator<BookingNoteRequest> noteValidator)
+        IValidator<BookingNoteRequest> noteValidator, IClock clock)
     {
         _bookings = bookings;
         _guests = guests;
@@ -48,6 +49,7 @@ public class BookingService : IBookingService
         _validator = validator;
         _updateValidator = updateValidator;
         _noteValidator = noteValidator;
+        _clock = clock;
     }
 
     public async Task<PagedResult<BookingDto>> SearchAsync(BookingFilter filter)
@@ -81,7 +83,7 @@ public class BookingService : IBookingService
         var rate = await _rates.FindRateAsync(hotel.Id, type.Id, request.RatePlanId, request.CheckIn)
             ?? throw new BusinessRuleException("No rate is loaded for that room type and rate plan on the check-in date.");
         var nights = request.CheckOut.DayNumber - request.CheckIn.DayNumber;
-        var now = DateTime.UtcNow;
+        var now = _clock.UtcNow;
         var booking = new Booking
         {
             Reference = $"LH-{await _bookings.NextReferenceNumberAsync()}",
@@ -117,7 +119,7 @@ public class BookingService : IBookingService
         booking.CheckOut = request.CheckOut;
         booking.Adults = request.Adults;
         booking.TotalAmount = rate.NightlyRate * booking.Nights;
-        booking.UpdatedAt = DateTime.UtcNow;
+        booking.UpdatedAt = _clock.UtcNow;
         await _bookings.SaveAsync();
         return await ToDtoAsync(booking);
     }
@@ -127,16 +129,16 @@ public class BookingService : IBookingService
         var booking = await LoadAsync(id);
         if (booking.Status != BookingStatuses.Confirmed)
             throw new BusinessRuleException($"A {booking.Status} booking cannot be cancelled.");
-        var daysToArrival = booking.CheckIn.DayNumber - DateOnly.FromDateTime(DateTime.Now).DayNumber;
+        var daysToArrival = booking.CheckIn.DayNumber - DateOnly.FromDateTime(_clock.UtcNow).DayNumber;
         var fee = daysToArrival < 2 ? Math.Round(booking.TotalAmount / booking.Nights, 2) : 0m;
         booking.Status = BookingStatuses.Cancelled;
         booking.RoomId = null;
-        booking.UpdatedAt = DateTime.UtcNow;
+        booking.UpdatedAt = _clock.UtcNow;
         await _bookings.AddNoteAsync(new BookingNote
         {
             BookingId = booking.Id,
             Note = fee > 0 ? $"Cancelled inside 2 days of arrival. Fee {fee:0.00}." : "Cancelled by guest.",
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = _clock.UtcNow
         });
         await _bookings.SaveAsync();
         return new CancelResultDto(booking.Id, booking.Status, fee);
@@ -148,8 +150,11 @@ public class BookingService : IBookingService
         if (booking.Status != BookingStatuses.Confirmed)
             throw new BusinessRuleException($"A {booking.Status} booking cannot be checked in.");
         if (booking.RoomId == null) throw new BusinessRuleException("Assign a room before check-in.");
+        var room = await _rooms.GetAsync(booking.RoomId.Value) ?? throw new NotFoundException($"Room {booking.RoomId} not found.");
+        if (room.Status != RoomStatuses.Ready)
+            throw new BusinessRuleException($"Room {room.RoomNumber} is {room.Status}. Check-in needs a Ready room.");
         booking.Status = BookingStatuses.CheckedIn;
-        booking.UpdatedAt = DateTime.UtcNow;
+        booking.UpdatedAt = _clock.UtcNow;
         await _bookings.SaveAsync();
         return await ToDtoAsync(booking);
     }
@@ -159,21 +164,40 @@ public class BookingService : IBookingService
         var booking = await LoadAsync(id);
         if (booking.Status != BookingStatuses.CheckedIn)
             throw new BusinessRuleException($"A {booking.Status} booking cannot be checked out.");
+        var now = _clock.UtcNow;
         booking.Status = BookingStatuses.CheckedOut;
-        booking.UpdatedAt = DateTime.UtcNow;
+        booking.UpdatedAt = now;
         if (booking.RoomId.HasValue)
         {
             var room = await _rooms.GetAsync(booking.RoomId.Value);
             if (room != null)
             {
-                await _rooms.AddStatusEventAsync(new RoomStatusEvent
+                // BR-02: an out-of-order room stays out of order; every checkout still starts a turnaround.
+                if (room.Status != RoomStatuses.Dirty && room.Status != RoomStatuses.OutOfOrder)
                 {
-                    RoomId = room.Id,
-                    FromStatus = room.Status,
-                    ToStatus = RoomStatuses.Dirty,
-                    ChangedAt = DateTime.UtcNow
-                });
-                room.Status = RoomStatuses.Dirty;
+                    await _rooms.AddStatusEventAsync(new RoomStatusEvent
+                    {
+                        RoomId = room.Id,
+                        FromStatus = room.Status,
+                        ToStatus = RoomStatuses.Dirty,
+                        ChangedAt = now
+                    });
+                    room.Status = RoomStatuses.Dirty;
+                    room.RowVersion++;
+                }
+                // At most one open turnaround per room (BR-18 applies the same rule to the lock).
+                if (await _rooms.GetOpenTurnaroundAsync(room.Id) == null)
+                {
+                    var type = await _types.GetAsync(room.RoomTypeId) ?? throw new NotFoundException($"Room type {room.RoomTypeId} not found.");
+                    await _rooms.AddTurnaroundAsync(new RoomTurnaround
+                    {
+                        RoomId = room.Id,
+                        BookingId = booking.Id,
+                        CheckoutAt = now,
+                        TargetMinutes = type.SlaMinutes,
+                        IsOpen = true
+                    });
+                }
             }
         }
         await _bookings.SaveAsync();
@@ -188,10 +212,12 @@ public class BookingService : IBookingService
         var room = await _rooms.GetAsync(request.RoomId) ?? throw new NotFoundException($"Room {request.RoomId} not found.");
         if (room.HotelId != booking.HotelId) throw new BusinessRuleException("That room belongs to a different hotel.");
         if (room.RoomTypeId != booking.RoomTypeId) throw new BusinessRuleException("That room is a different room type from the one booked.");
+        if (room.Status == RoomStatuses.OutOfOrder)
+            throw new BusinessRuleException($"Room {room.RoomNumber} is out of order and cannot be assigned.");
         if (await _bookings.RoomHasOverlapAsync(room.Id, booking.Id, booking.CheckIn, booking.CheckOut))
             throw new ConflictException($"Room {room.RoomNumber} is already taken for those dates.");
         booking.RoomId = room.Id;
-        booking.UpdatedAt = DateTime.UtcNow;
+        booking.UpdatedAt = _clock.UtcNow;
         await _bookings.SaveAsync();
         return await ToDtoAsync(booking);
     }
@@ -211,7 +237,7 @@ public class BookingService : IBookingService
             BookingId = id,
             AuthorUserId = request.AuthorUserId,
             Note = request.Note.Trim(),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = _clock.UtcNow
         };
         await _bookings.AddNoteAsync(note);
         await _bookings.SaveAsync();

@@ -1,4 +1,5 @@
 using FluentValidation;
+using FluentValidation.Results;
 using Larchmont.Api.Domain;
 using Larchmont.Api.Dtos;
 using Larchmont.Api.Infrastructure;
@@ -114,16 +115,23 @@ public class RoomService : IRoomService
     private readonly IRoomTypeRepository _types;
     private readonly IHotelRepository _hotels;
     private readonly IBookingRepository _bookings;
+    private readonly IUserRepository _users;
     private readonly IValidator<RoomRequest> _validator;
+    private readonly IRoomStatusPolicy _policy;
+    private readonly IClock _clock;
 
     public RoomService(IRoomRepository rooms, IRoomTypeRepository types, IHotelRepository hotels,
-        IBookingRepository bookings, IValidator<RoomRequest> validator)
+        IBookingRepository bookings, IUserRepository users, IValidator<RoomRequest> validator,
+        IRoomStatusPolicy policy, IClock clock)
     {
         _rooms = rooms;
         _types = types;
         _hotels = hotels;
         _bookings = bookings;
+        _users = users;
         _validator = validator;
+        _policy = policy;
+        _clock = clock;
     }
 
     public async Task<List<RoomDto>> ListAsync(int? hotelId, string? status, int? floor)
@@ -150,7 +158,7 @@ public class RoomService : IRoomService
             RoomNumber = request.RoomNumber.Trim(),
             Floor = request.Floor,
             Notes = request.Notes,
-            Status = RoomStatuses.Ready
+            Status = RoomStatuses.Dirty // Q7 default: a new room is cleaned and inspected before sale.
         };
         await _rooms.AddAsync(room);
         return await ToDtoAsync(room);
@@ -170,26 +178,95 @@ public class RoomService : IRoomService
         return await ToDtoAsync(room);
     }
 
-    public async Task<RoomDto> SetStatusAsync(int id, RoomStatusRequest request)
+    public Task<RoomDto> SetStatusAsync(int id, RoomStatusRequest request) =>
+        ChangeStatusAsync(id, request.Status, request.ChangedByUserId, request.RowVersion, request.Reason, expectedReturn: null);
+
+    public Task<RoomDto> SetOutOfOrderAsync(int id, OutOfOrderRequest request) =>
+        ChangeStatusAsync(id, RoomStatuses.OutOfOrder, request.ChangedByUserId, request.RowVersion, request.Reason, request.ExpectedReturn);
+
+    private async Task<RoomDto> ChangeStatusAsync(int id, string toStatus, int? changedByUserId, int? rowVersion,
+        string? reason, DateTime? expectedReturn)
     {
-        if (!RoomStatuses.All.Contains(request.Status))
+        if (!RoomStatuses.All.Contains(toStatus))
             throw new BusinessRuleException($"Status must be one of: {string.Join(", ", RoomStatuses.All)}.");
+        if (changedByUserId is null) throw Invalid("changedByUserId", "changedByUserId is required.");
+        if (rowVersion is null) throw Invalid("rowVersion", "rowVersion is required.");
+
         var room = await _rooms.GetAsync(id) ?? throw new NotFoundException($"Room {id} not found.");
-        var previous = room.Status;
-        room.Status = request.Status;
-        await _rooms.AddStatusEventAsync(new RoomStatusEvent
+        var user = await _users.GetAsync(changedByUserId.Value)
+            ?? throw new NotFoundException($"User {changedByUserId} not found.");
+        if (rowVersion.Value != room.RowVersion)
+            throw new ConflictException($"Room {room.RoomNumber} changed. Reload and try again.");
+
+        var from = room.Status;
+        _policy.EnsureMoveAllowed(from, toStatus, user.Role, room.SimpleTurn, reason);
+        var now = _clock.UtcNow;
+        var trimmedReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        var shortcut = from == RoomStatuses.Cleaning && toStatus == RoomStatuses.Ready;
+
+        if (from == RoomStatuses.Dirty && toStatus == RoomStatuses.Cleaning)
+        {
+            // Q1: simple turn is decided when cleaning starts, and never for a room released from OutOfOrder.
+            var type = await _types.GetAsync(room.RoomTypeId) ?? throw new NotFoundException($"Room type {room.RoomTypeId} not found.");
+            var last = await _rooms.GetLastEntryAsync(room.Id, RoomStatuses.Dirty);
+            var releasedFromOutOfOrder = last?.FromStatus == RoomStatuses.OutOfOrder;
+            room.SimpleTurn = _policy.IsSimpleTurnType(type.Code) && !releasedFromOutOfOrder;
+        }
+        if (from == RoomStatuses.OutOfOrder)
+        {
+            room.SimpleTurn = false;
+            room.OooReason = null;
+            room.OooSince = null;
+            room.OooExpectedReturn = null;
+        }
+        if (toStatus == RoomStatuses.OutOfOrder)
+        {
+            room.OooReason = trimmedReason;
+            room.OooSince = now;
+            room.OooExpectedReturn = expectedReturn;
+        }
+        if (toStatus == RoomStatuses.Ready)
+        {
+            // The turnaround clock stops here (BR-13).
+            var open = await _rooms.GetOpenTurnaroundAsync(room.Id);
+            if (open != null)
+            {
+                open.ReadyAt = now;
+                open.IsOpen = false;
+            }
+        }
+
+        var history = new RoomStatusEvent
         {
             RoomId = room.Id,
-            FromStatus = previous,
-            ToStatus = request.Status,
-            ChangedByUserId = request.ChangedByUserId,
-            ChangedAt = DateTime.UtcNow
-        });
-        await _rooms.SaveAsync();
+            FromStatus = from,
+            ToStatus = toStatus,
+            ChangedByUserId = user.Id,
+            ChangedAt = now,
+            Reason = shortcut ? RoomStatusPolicy.SimpleTurnShortcutReason : trimmedReason
+        };
+        await _rooms.AddStatusEventAsync(history);
+        room.Status = toStatus;
+        room.RowVersion++;
+        await _rooms.SaveChangedAsync(room);
+
+        // BR-06: a simple-turn shortcut goes on the supervisor spot-check list. The history id is needed
+        // for the spot-check row, so this second save runs after the history row has its id.
+        if (shortcut)
+        {
+            await _rooms.AddSpotCheckAsync(new RoomSpotCheck
+            {
+                RoomId = room.Id,
+                StatusHistoryId = history.Id,
+                CreatedAt = now
+            });
+            await _rooms.SaveAsync();
+        }
         return await ToDtoAsync(room);
     }
 
-    public Task<RoomDto> SetOutOfOrderAsync(int id, OutOfOrderRequest request) => throw new NotImplementedException();
+    private static ValidationException Invalid(string field, string message) =>
+        new(new[] { new ValidationFailure(field, message) });
 
     public async Task<RoomAvailabilityDto> GetAvailabilityAsync(int id, DateOnly from, DateOnly to)
     {
