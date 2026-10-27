@@ -126,9 +126,11 @@ public class HousekeepingBoardTests
 
         // When 201 is marked Ready at 11:15 and 202 at 11:16, and the breach list is read.
         f.Clock.UtcNow = At(11, 15);
-        await Move(f, client, 201, RoomStatuses.Ready, HousekeeperA);
+        await Move(f, client, 201, RoomStatuses.Inspected, Supervisor);
+        await Move(f, client, 201, RoomStatuses.Ready, Supervisor);
         f.Clock.UtcNow = At(11, 16);
-        await Move(f, client, 202, RoomStatuses.Ready, HousekeeperA);
+        await Move(f, client, 202, RoomStatuses.Inspected, Supervisor);
+        await Move(f, client, 202, RoomStatuses.Ready, Supervisor);
         var items = await Breaches(client);
 
         // Then 201 (75 minutes) is not listed, and 202 is listed with targetMinutes 75 and overrunMinutes 1.
@@ -151,7 +153,8 @@ public class HousekeepingBoardTests
         await Checkout(client, "301", At(10));
         await Move(f, client, 301, RoomStatuses.Cleaning, HousekeeperA);
         f.Clock.UtcNow = At(11, 16);
-        await Move(f, client, 301, RoomStatuses.Ready, HousekeeperA);
+        await Move(f, client, 301, RoomStatuses.Inspected, Supervisor);
+        await Move(f, client, 301, RoomStatuses.Ready, Supervisor);
 
         // When the breach list is read. Then listed with targetMinutes 75 and overrunMinutes 1.
         var item = Find(await Breaches(client), 301);

@@ -59,7 +59,7 @@ public class ApiExceptionHandler : IExceptionHandler
                 break;
         }
         context.Response.StatusCode = problem.Status!.Value;
-        await context.Response.WriteAsJsonAsync(problem, ct);
+        await context.Response.WriteAsJsonAsync(problem, problem.GetType(), ct);
         return true;
     }
 }

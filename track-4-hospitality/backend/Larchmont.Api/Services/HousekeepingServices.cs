@@ -187,7 +187,7 @@ public class HousekeepingBoardService : IHousekeepingBoardService
         await _spotCheckValidator.ValidateAndThrowAsync(request);
         var caller = await _users.GetAsync(request.ChangedByUserId)
             ?? throw new NotFoundException($"User {request.ChangedByUserId} not found.");
-        if (!caller.Active || !HousekeepingRoles.Supervisors.Contains(caller.Role))
+        if (!caller.Active || !SupervisorRoles.Names.Contains(caller.Role))
             throw new ForbiddenException("Only a Supervisor can mark a spot-check.");
 
         var room = await _rooms.GetAsync(roomId) ?? throw new NotFoundException($"Room {roomId} not found.");
@@ -273,7 +273,7 @@ public class FloorAssignmentService : IFloorAssignmentService
 
         var caller = await _users.GetAsync(request.ChangedByUserId)
             ?? throw new NotFoundException($"User {request.ChangedByUserId} not found.");
-        if (!caller.Active || !HousekeepingRoles.Supervisors.Contains(caller.Role))
+        if (!caller.Active || !SupervisorRoles.Names.Contains(caller.Role))
             throw new ForbiddenException("Only a Supervisor can assign floors.");
 
         // Check every assignee before changing anything (BR-17).
@@ -302,10 +302,10 @@ public class FloorAssignmentService : IFloorAssignmentService
     }
 }
 
-internal static class HousekeepingRoles
+internal static class SupervisorRoles
 {
     // Roles that may mark spot-checks and assign floors. Admin has all moves (spec, Users table).
-    public static readonly string[] Supervisors = { "Supervisor", "Admin" };
+    public static readonly string[] Names = { "Supervisor", "Admin" };
 }
 
 public interface ILockIntegrationService
