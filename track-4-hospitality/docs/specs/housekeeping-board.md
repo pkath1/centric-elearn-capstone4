@@ -1,7 +1,7 @@
 # Spec: Housekeeping and room-status board
 
 Source: `docs/stakeholder-brief.md` (Sofia Lindqvist, Director of Rooms, 19 October 2026).
-Status: draft. Open questions are pending a mentor reply.
+Status: approved by the user on the default answers. Sofia has not replied; every default below is an unconfirmed assumption and may change.
 
 ## Overview
 Larchmont's front desk sold and checked in guests to rooms still being cleaned, and sold a room that engineers had taken out of service. Housekeeping coordinates by walkie-talkie and a whiteboard. This feature puts every room into a tracked status, enforces a cleaning and inspection path, stops the desk selling or assigning rooms that are not Ready, measures turnaround against a target, and gives the desk a single "when will this room be ready?" answer.
