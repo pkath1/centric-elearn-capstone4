@@ -7,7 +7,7 @@ namespace Larchmont.Mcp.Tools;
 
 /// <summary>
 /// The four business tools. Each runs fixed, parameterised SQL over the mcp views. Clients never supply SQL here.
-/// The hotel scope is applied by the views through the session variable, not by these methods.
+/// The hotel scope is fixed in the view definitions (db-setup/02-mcp-views.sql), not in these methods.
 /// </summary>
 [McpServerToolType]
 public sealed class HousekeepingTools

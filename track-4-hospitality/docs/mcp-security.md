@@ -1,6 +1,6 @@
 # MCP server security: Larchmont housekeeping and occupancy
 
-Status: written before the database scripts were run. The coordinator applies `db-setup/02-mcp-views.sql` and `db-setup/03-create-mcp-user.sql`. No live MySQL was available to the author, so the database controls are reviewed, not yet tested against a server.
+Status: `02-mcp-views.sql` (with the hotel id substituted) has been applied to `larchmont_scratch` and all seven views query. `03-create-mcp-user.sql` has not been run (no root available to the author); the coordinator applies it, so the grants and the least-privilege user are not yet tested against a server.
 
 ## What it is
 
@@ -36,7 +36,7 @@ Database grants are the first line. The server guard is the second. Neither is t
 | C1 | The MCP user has SELECT on the seven `v_mcp_*` views only, and no grant on any base table, `users` or credentials | Database: `03-create-mcp-user.sql` | Reading base tables, staff credentials, or anything not in a view, even if the guard is bypassed |
 | C2 | Views omit personal columns and free-text notes (no guest name, email, phone, address, staff email, password hash, `last_login_at`, `notes`, `reason`, `ooo_reason`) | Database: `02-mcp-views.sql` | Personal data leaving the database through any view |
 | C3 | Views run with the definer's privileges (`SQL SECURITY DEFINER`), so the MCP user needs no base-table grants | Database: `02-mcp-views.sql` | The need to grant base tables to make views work |
-| C4 | Hotel scope: every view filters on `@larchmont_mcp_hotel_id`, which the server sets from `LARCHMONT_MCP_HOTEL_ID` on each connection. Unset means no rows | Database views, set by server | Cross-hotel reads, including from `run_readonly_query` |
+| C4 | Hotel scope: every view has `WHERE hotel_id = <id>`, with the id substituted into the view definitions at install time by `sed` (the file must not be run unsubstituted). The clients supply no hotel and cannot change it | Database: `02-mcp-views.sql` | Cross-hotel reads, including from `run_readonly_query` |
 | C5 | Audit: the MCP user can INSERT into `mcp_query_audit` and cannot read, update or delete it | Database: `03-create-mcp-user.sql` | Silent use. Every call, including refused ones, leaves a row |
 | C6 | Account limits: `MAX_QUERIES_PER_HOUR 1000`, `MAX_USER_CONNECTIONS 4` | Database: `03-create-mcp-user.sql` | Runaway loops and connection exhaustion |
 | C7 | Single statement, read-only: one statement, only `SELECT` or `WITH ... SELECT` | Server: `SqlGuard` | Writes, DDL, stacked statements |
@@ -44,7 +44,7 @@ Database grants are the first line. The server guard is the second. Neither is t
 | C9 | Allowlist of names: only `v_mcp_*` views, their columns, CTE names, aliases, and a short list of functions. Base tables, other schemas (`information_schema`, `mysql`, `performance_schema`, `sys`, `db.table`) are refused | Server: `SqlGuard` | Reading base tables or other databases |
 | C10 | Personal-data denylist by column name, checked even if a view later exposed the column | Server: `SqlGuard`, `McpSchema.PersonalColumns` | Requests for personal columns |
 | C11 | Refused: `INTO` (OUTFILE, DUMPFILE, variables), `LOAD_FILE`, `SLEEP`, `BENCHMARK`, locks, `FOR UPDATE`, `SET`, `CALL`, `GRANT`, `SHOW`, `EXPLAIN`, `USE` | Server: `SqlGuard` | File write and read, delays, lock abuse, admin statements |
-| C12 | User variables (`@`), placeholders (`?`), backticks, backslashes and `:` are refused | Server: `SqlGuard` | Using session state to bypass the hotel variable, and escape tricks |
+| C12 | User variables (`@`), placeholders (`?`), backticks, backslashes and `:` are refused | Server: `SqlGuard` | Using session state (user variables), placeholders and escape tricks to alter a statement's meaning |
 | C13 | Length cap of 4000 characters | Server: `SqlGuard` | Very large payloads |
 | C14 | Row cap: at most 200 rows read; the cursor is cancelled at the cap and `truncated` is reported | Server: `QueryRunner` | Bulk export through the tool |
 | C15 | Timeout: 5 seconds (`CommandTimeout`) and `max_execution_time` 5000 ms set on the session | Server: `QueryRunner`, plus the database | Long-running and resource-heavy queries |
@@ -67,12 +67,12 @@ Database grants are the first line. The server guard is the second. Neither is t
 ## How to run
 
 1. Apply the migrations (the API does this on start). Then, as an administrator:
-   - `mysql -h HOST -u ADMIN -p larchmont < db-setup/02-mcp-views.sql`
+   - Run `02-mcp-views.sql` with the hotel id substituted. The file must not be run unsubstituted (the placeholder `__MCP_HOTEL_ID__` is a syntax error): `sed "s/__MCP_HOTEL_ID__/1/g" db-setup/02-mcp-views.sql | mysql -h 127.0.0.1 -P 3306 -u ADMIN -p larchmont`. Use the hotel's `hotels.id` in place of `1`, and the same command with `larchmont_scratch` for the scratch copy.
    - Run `db-setup/03-create-mcp-user.sql` with the placeholders substituted at run time. The header of that file shows the Git Bash command. The password is read silently and never written to disk.
    - Check the grants: `SHOW GRANTS FOR 'larchmont_mcp'@'%';`
 2. On the developer machine, set environment variables (names as in `.mcp.json`):
    - `LARCHMONT_MCP_CONNECTION`: a MySQL connection string for `larchmont_mcp`, set in the shell or the user's environment, never in a file in the repo.
-   - `LARCHMONT_MCP_HOTEL_ID`: the numeric `hotels.id` of the one hotel this server may read.
+   - `LARCHMONT_MCP_HOTEL_ID`: the same `hotels.id` used in step 1. It is written to the audit log only. It does not scope queries, so it must match the installed views.
 3. Start the server directly to check the settings: `dotnet run --project mcp/Larchmont.Mcp`. With no variables set, it prints the names of the missing variables and exits with code 2.
 4. Claude Code reads `.mcp.json` and starts the server over stdio.
 
@@ -84,9 +84,9 @@ Database grants are the first line. The server guard is the second. Neither is t
 ## Known limits
 
 1. **The guard is a tokenizer with allowlists, not a SQL parser.** It is strict and refuses what it does not recognise. That causes false refusals: for example, an alias that has the same name as a base table is refused. A bypass that a parser-based guard would stop is still possible in principle, which is why the database grants (C1) are the first line.
-2. **Hotel scope depends on the session variable.** The server sets it on each connection. Anyone with direct MySQL access as `larchmont_mcp` could set it, but they already hold the password. The guard refuses `@` in client SQL, so the tool cannot change it.
-3. **The views were written but not run.** The `@larchmont_mcp_hotel_id` pattern in view definitions is not verified against a live MySQL. The coordinator should run `02` against `larchmont_scratch` and query each view with the variable set and unset.
-4. **Time.** `CURDATE()` in `v_mcp_arrivals_today` uses the MySQL server's time zone, not the hotel's. Turnaround minutes use `UTC_TIMESTAMP()`, which matches the stored UTC timestamps.
+2. **One hotel per install, and the install is the scope.** The hotel id is in the view definitions. A second hotel needs a second install (or a re-run with another id, which replaces the views for every client of the database). `LARCHMONT_MCP_HOTEL_ID` is not checked against the views; a mismatch only makes the audit `hotel_id` wrong.
+3. **The views were verified only on a scratch database, as the admin account, not as `larchmont_mcp`.** The grants in `03` have not been run.
+4. **Time.** The views use `UTC_TIMESTAMP()` and `UTC_DATE()`, matching the UTC timestamps the spec stores. No server time zone is used.
 5. **Occupancy is at booking level.** `ooo_impact_on_occupancy` counts bookings overlapping a window, not nights. Out-of-order status is the room's current status, not its status on each night. Ticket LH-56 (the night-counting error in the report) is a separate fix.
 6. **One database user for every caller.** The audit row records `larchmont_mcp@host`, not the person or assistant who asked. The `tool` column and statement text are the only caller detail.
 7. **Audit failure on refused calls is logged, not fatal.** If the audit row cannot be written for a refused statement, the refusal is still returned and the failure is logged by exception type on stderr. A successful call with no audit row returns no data.

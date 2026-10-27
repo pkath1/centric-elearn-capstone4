@@ -22,6 +22,10 @@ public sealed class McpConfig
 
     public string ConnectionString { get; }
 
+    /// <summary>
+    /// The hotel the installed views are for. Used only as the hotel_id written to the audit log. It does not scope
+    /// queries: the scope is in the view definitions, so this must match the id used when 02-mcp-views.sql was run.
+    /// </summary>
     public int HotelId { get; }
 
     /// <summary>Reads and checks the settings. Throws <see cref="McpConfigException"/> with a message that names variables, never values.</summary>
@@ -61,7 +65,7 @@ public sealed class McpConfig
         if (string.IsNullOrWhiteSpace(hotel))
         {
             throw new McpConfigException(
-                $"Environment variable {HotelVariable} is not set. Set it to the numeric id of the one hotel this server may read (hotels.id).");
+                $"Environment variable {HotelVariable} is not set. Set it to the hotels.id that 02-mcp-views.sql was installed for (audit only).");
         }
 
         if (!int.TryParse(hotel, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var hotelId) || hotelId <= 0)

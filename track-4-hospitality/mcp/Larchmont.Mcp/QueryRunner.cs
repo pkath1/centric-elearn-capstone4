@@ -10,8 +10,8 @@ public sealed record QueryResult(IReadOnlyList<string> Columns, List<Dictionary<
 public sealed class McpQueryException(string message) : Exception(message);
 
 /// <summary>
-/// Runs statements for the MCP tools. Every connection sets the hotel scope variable first, so the views
-/// return only the configured hotel. Every call writes one row to mcp_query_audit (outcome, row count, time).
+/// Runs statements for the MCP tools. The hotel scope is part of the view definitions (02-mcp-views.sql), not
+/// set per connection. Every call writes one row to mcp_query_audit (outcome, row count, time).
 /// The connection string is used to open connections and is never written to output or logs.
 /// </summary>
 public sealed class QueryRunner
@@ -65,12 +65,6 @@ public sealed class QueryRunner
     {
         await using var connection = new MySqlConnection(_config.ConnectionString);
         await connection.OpenAsync(ct);
-
-        await using (var scope = new MySqlCommand($"SET @{McpSchema.HotelSessionVariable} = @hotel", connection))
-        {
-            scope.Parameters.AddWithValue("@hotel", _config.HotelId);
-            await scope.ExecuteNonQueryAsync(ct);
-        }
 
         await using (var timeout = new MySqlCommand($"SET SESSION max_execution_time = {StatementTimeoutMilliseconds}", connection))
         {

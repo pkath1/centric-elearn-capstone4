@@ -2,15 +2,19 @@
 -- Read-only views for the Larchmont MCP server (mcp/Larchmont.Mcp).
 --
 -- Run order: V001 to V005 (migrations, applied by the API), then this file, then 03-create-mcp-user.sql.
--- Run against the database you want, by naming it on the command line, for example:
---   mysql -h HOST -u ADMIN -p larchmont < db-setup/02-mcp-views.sql
---   mysql -h HOST -u ADMIN -p larchmont_scratch < db-setup/02-mcp-views.sql
--- This file contains no USE statement and no database name, so the same file works for both.
+--
+-- MUST BE RUN WITH SUBSTITUTION. Do not run this file as it is: the placeholder __MCP_HOTEL_ID__ is not valid SQL.
+-- Replace it with the integer hotels.id of the one hotel the MCP server may read, by piping through sed:
+--   sed "s/__MCP_HOTEL_ID__/1/g" db-setup/02-mcp-views.sql | mysql -h 127.0.0.1 -P 3306 -u ADMIN -p larchmont
+--   sed "s/__MCP_HOTEL_ID__/1/g" db-setup/02-mcp-views.sql | mysql -h 127.0.0.1 -P 3306 -u ADMIN -p larchmont_scratch
+-- Use your hotel's id in place of 1. Enter the password at the prompt, never on the command line.
+-- This file has no USE statement and no database name, so the same file works for both databases.
 -- Run it as an administrator. The view definer is the account that runs this file.
 --
--- Scope (one hotel per MCP server):
---   Every view filters on the session variable @larchmont_mcp_hotel_id. The MCP server sets that
---   variable on each connection from LARCHMONT_MCP_HOTEL_ID. If it is not set, the views return no rows.
+-- Scope (one hotel per install), fixed in the view definitions:
+--   Every view filters on WHERE hotel_id = <the substituted id>. MySQL refuses views that read user
+--   variables (ERROR 1351), so the hotel is part of each definition. To change hotel, re-run with another id.
+--   The MCP server's LARCHMONT_MCP_HOTEL_ID must equal that id. The server only writes it to the audit log.
 --   The views take no parameters.
 --
 -- Personal data: no view exposes guest names, emails, phones, addresses, staff emails or display names,
@@ -18,7 +22,7 @@
 --   rooms.ooo_reason). Out-of-order rooms show only whether a reason exists.
 --
 -- Security definer: views run with the definer's privileges, so the MCP user needs no base-table grants.
--- Times are UTC (the spec's convention). CURDATE() uses the MySQL server time zone; see docs/mcp-security.md.
+-- Times are UTC (the spec's convention): UTC_TIMESTAMP() and UTC_DATE() throughout, no server time zone.
 --
 -- The audit table mcp_query_audit is created in 03-create-mcp-user.sql, not here.
 
@@ -43,7 +47,7 @@ SELECT r.hotel_id,
 FROM room_turnarounds rt
 JOIN rooms r ON r.id = rt.room_id
 JOIN room_types t ON t.id = r.room_type_id
-WHERE r.hotel_id = @larchmont_mcp_hotel_id;
+WHERE r.hotel_id = __MCP_HOTEL_ID__;
 
 -- Every room with its status (board and occupancy inputs).
 CREATE OR REPLACE SQL SECURITY DEFINER VIEW v_mcp_rooms AS
@@ -58,7 +62,7 @@ SELECT r.hotel_id,
        r.ooo_expected_return
 FROM rooms r
 JOIN room_types t ON t.id = r.room_type_id
-WHERE r.hotel_id = @larchmont_mcp_hotel_id;
+WHERE r.hotel_id = __MCP_HOTEL_ID__;
 
 -- Rooms currently OutOfOrder. The reason text is masked: only has_reason is shown.
 CREATE OR REPLACE SQL SECURITY DEFINER VIEW v_mcp_out_of_order_rooms AS
@@ -72,7 +76,7 @@ SELECT r.hotel_id,
        CASE WHEN r.ooo_reason IS NULL OR r.ooo_reason = '' THEN 0 ELSE 1 END AS has_reason
 FROM rooms r
 JOIN room_types t ON t.id = r.room_type_id
-WHERE r.hotel_id = @larchmont_mcp_hotel_id
+WHERE r.hotel_id = __MCP_HOTEL_ID__
   AND r.status = 'OutOfOrder';
 
 -- Rooms per housekeeper per floor, with counts by status. Only the user id is shown, never a name or contact.
@@ -92,7 +96,7 @@ LEFT JOIN floor_assignments fa
        ON fa.hotel_id = r.hotel_id
       AND fa.floor = r.floor
       AND fa.active = 1
-WHERE r.hotel_id = @larchmont_mcp_hotel_id
+WHERE r.hotel_id = __MCP_HOTEL_ID__
 GROUP BY r.hotel_id, r.floor, fa.housekeeper_user_id;
 
 -- Confirmed bookings arriving today, with the assigned room's status. Booking reference only, no guest.
@@ -108,8 +112,8 @@ SELECT b.hotel_id,
        r.status AS room_status
 FROM bookings b
 LEFT JOIN rooms r ON r.id = b.room_id
-WHERE b.hotel_id = @larchmont_mcp_hotel_id
-  AND b.check_in = CURDATE()
+WHERE b.hotel_id = __MCP_HOTEL_ID__
+  AND b.check_in = UTC_DATE()
   AND b.status = 'Confirmed';
 
 -- Room inventory per room type: total, out of order, and available (out-of-order rooms are not available, BR-20).
@@ -121,7 +125,7 @@ SELECT r.hotel_id,
        CAST(SUM(r.status <> 'OutOfOrder') AS SIGNED) AS rooms_available
 FROM rooms r
 JOIN room_types t ON t.id = r.room_type_id
-WHERE r.hotel_id = @larchmont_mcp_hotel_id
+WHERE r.hotel_id = __MCP_HOTEL_ID__
 GROUP BY r.hotel_id, t.code;
 
 -- Bookings as stays (dates, status, room). No guest columns and no notes.
@@ -138,4 +142,4 @@ SELECT b.hotel_id,
 FROM bookings b
 LEFT JOIN rooms r ON r.id = b.room_id
 LEFT JOIN room_types t ON t.id = b.room_type_id
-WHERE b.hotel_id = @larchmont_mcp_hotel_id;
+WHERE b.hotel_id = __MCP_HOTEL_ID__;

@@ -6,7 +6,6 @@ namespace Larchmont.Mcp;
 /// </summary>
 public static class McpSchema
 {
-    public const string HotelSessionVariable = "larchmont_mcp_hotel_id";
 
     public static readonly IReadOnlyDictionary<string, string[]> Views =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
