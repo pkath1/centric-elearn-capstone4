@@ -8,8 +8,8 @@ public interface IRoomTurnaroundRepository
 {
     // Every open turnaround at the hotel (one query).
     Task<List<RoomTurnaround>> ListOpenForHotelAsync(int hotelId);
-    // Every turnaround at the hotel, open and closed (one query).
-    Task<List<RoomTurnaround>> ListForHotelAsync(int hotelId);
+    // Every open turnaround at the hotel, plus closed ones checked out at or after closedSince (one query).
+    Task<List<RoomTurnaround>> ListForHotelAsync(int hotelId, DateTime closedSince);
     // Latest Ready stamp for each of the given rooms that has one (one query).
     Task<Dictionary<int, DateTime>> LatestReadyAtByRoomAsync(IReadOnlyCollection<int> roomIds);
     Task<RoomTurnaround?> GetOpenForRoomAsync(int roomId);
@@ -29,9 +29,10 @@ public class RoomTurnaroundRepository : IRoomTurnaroundRepository
             .Where(t => t.IsOpen && _db.Rooms.Any(r => r.Id == t.RoomId && r.HotelId == hotelId))
             .ToListAsync();
 
-    public Task<List<RoomTurnaround>> ListForHotelAsync(int hotelId) =>
+    public Task<List<RoomTurnaround>> ListForHotelAsync(int hotelId, DateTime closedSince) =>
         _db.RoomTurnarounds
-            .Where(t => _db.Rooms.Any(r => r.Id == t.RoomId && r.HotelId == hotelId))
+            .Where(t => (t.IsOpen || t.CheckoutAt >= closedSince)
+                        && _db.Rooms.Any(r => r.Id == t.RoomId && r.HotelId == hotelId))
             .ToListAsync();
 
     public async Task<Dictionary<int, DateTime>> LatestReadyAtByRoomAsync(IReadOnlyCollection<int> roomIds)
@@ -62,9 +63,9 @@ public class RoomTurnaroundRepository : IRoomTurnaroundRepository
 public interface IFloorAssignmentRepository
 {
     Task<List<FloorAssignment>> ListActiveAsync(int hotelId);
-    // Ends the active owner of the floor (if another user) and makes userId the active owner.
-    // Saves in two steps so the active-floor unique key is free before the new row is inserted.
-    Task ReplaceActiveAsync(int hotelId, int floor, int housekeeperUserId);
+    // Makes each listed user the active owner of their floor, ending the previous owner. All floors are
+    // written in one database transaction: either every floor changes or none does (BR-17).
+    Task ReplaceActiveForFloorsAsync(int hotelId, IReadOnlyList<(int Floor, int HousekeeperUserId)> assignments);
 }
 
 public class FloorAssignmentRepository : IFloorAssignmentRepository
@@ -77,24 +78,40 @@ public class FloorAssignmentRepository : IFloorAssignmentRepository
             .OrderBy(f => f.Floor)
             .ToListAsync();
 
-    public async Task ReplaceActiveAsync(int hotelId, int floor, int housekeeperUserId)
+    public async Task ReplaceActiveForFloorsAsync(int hotelId, IReadOnlyList<(int Floor, int HousekeeperUserId)> assignments)
     {
+        var floors = assignments.Select(a => a.Floor).ToList();
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
         var current = await _db.FloorAssignments
-            .FirstOrDefaultAsync(f => f.HotelId == hotelId && f.Floor == floor && f.Active);
-        if (current != null)
+            .Where(f => f.HotelId == hotelId && f.Active && floors.Contains(f.Floor))
+            .ToListAsync();
+        var toAdd = new List<FloorAssignment>();
+        var ended = false;
+        foreach (var a in assignments)
         {
-            if (current.HousekeeperUserId == housekeeperUserId) return;
-            current.Active = false;
-            await _db.SaveChangesAsync();
+            var owner = current.FirstOrDefault(c => c.Floor == a.Floor);
+            if (owner?.HousekeeperUserId == a.HousekeeperUserId) continue;
+            if (owner != null)
+            {
+                owner.Active = false;
+                ended = true;
+            }
+            toAdd.Add(new FloorAssignment
+            {
+                HotelId = hotelId,
+                Floor = a.Floor,
+                HousekeeperUserId = a.HousekeeperUserId,
+                Active = true
+            });
         }
-        _db.FloorAssignments.Add(new FloorAssignment
-        {
-            HotelId = hotelId,
-            Floor = floor,
-            HousekeeperUserId = housekeeperUserId,
-            Active = true
-        });
+
+        // Two saves inside the one transaction: the old owners must be inactive before the new rows are
+        // inserted, because the active-floor unique key rejects two active rows for one floor.
+        if (ended) await _db.SaveChangesAsync();
+        _db.FloorAssignments.AddRange(toAdd);
         await _db.SaveChangesAsync();
+        await tx.CommitAsync();
     }
 }
 

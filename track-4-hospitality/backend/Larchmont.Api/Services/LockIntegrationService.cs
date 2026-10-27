@@ -12,28 +12,29 @@ public class LockIntegrationService : ILockIntegrationService
 {
     public const string LockReason = "LockCheckout";
     public const string StampMovedReason = "LockCheckoutStampMovedEarlier";
-    private const int MaxRoomNumberLength = 10;
 
     private readonly IHotelRepository _hotels;
     private readonly IRoomRepository _rooms;
     private readonly IRoomTypeRepository _types;
+    private readonly IValidator<LockCheckoutRequest> _validator;
     private readonly IClock _clock;
 
-    public LockIntegrationService(IHotelRepository hotels, IRoomRepository rooms, IRoomTypeRepository types, IClock clock)
+    public LockIntegrationService(IHotelRepository hotels, IRoomRepository rooms, IRoomTypeRepository types,
+        IValidator<LockCheckoutRequest> validator, IClock clock)
     {
         _hotels = hotels;
         _rooms = rooms;
         _types = types;
+        _validator = validator;
         _clock = clock;
     }
 
     public async Task<LockCheckoutResultDto> CheckoutAsync(LockCheckoutRequest request)
     {
+        // A null body cannot go through ValidateAndThrowAsync; the controller already returns 400 for an empty body.
         if (request is null) throw Invalid("request", "A request body is required.");
-        if (request.HotelId <= 0) throw Invalid("hotelId", "hotelId must be greater than 0.");
-        var roomNumber = (request.RoomNumber ?? "").Trim();
-        if (roomNumber.Length == 0 || roomNumber.Length > MaxRoomNumberLength)
-            throw Invalid("roomNumber", $"roomNumber is required and must be {MaxRoomNumberLength} characters or fewer.");
+        await _validator.ValidateAndThrowAsync(request);
+        var roomNumber = request.RoomNumber.Trim();
 
         var now = _clock.UtcNow;
         var lockTime = request.CheckedOutAt ?? now;

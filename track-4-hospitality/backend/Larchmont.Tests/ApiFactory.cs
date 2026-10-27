@@ -3,6 +3,7 @@ using Larchmont.Api.Domain;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -18,7 +19,10 @@ public class ApiFactory : WebApplicationFactory<Program>
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<LarchmontDbContext>>();
-            services.AddDbContext<LarchmontDbContext>(o => o.UseInMemoryDatabase(_dbName));
+            // The InMemory store has no transactions. Code that opens one (floor assignments, BR-17) runs without
+            // one here; the all-or-nothing rollback is only real on MySQL (see docs/perf-note.md).
+            services.AddDbContext<LarchmontDbContext>(o => o.UseInMemoryDatabase(_dbName)
+                .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning)));
         });
     }
 

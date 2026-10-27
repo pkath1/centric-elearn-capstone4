@@ -134,6 +134,7 @@ Errors: 404 hotel not found.
 
 ### New: `GET /api/hotels/{id}/sla-breaches`
 Response 200: `{ "items": [ { "roomId", "roomNumber", "roomType", "checkoutAt", "readyAt": null, "targetMinutes", "elapsedMinutes", "overrunMinutes" } ] }`. Open rooms (no Ready time) have `readyAt` null and elapsed measured to now. Ordered by `overrunMinutes` descending.
+Lookback (phase 6, `HousekeepingBoardService.SlaLookbackDays` = 30): the list considers every open turnaround, and a closed turnaround only when its `checkoutAt` is at or after now minus 30 days. Closed turnarounds older than that are neither scanned nor listed. Inside the window the results are unchanged. Reason: the query used to read the whole turnaround history of the hotel on every call (measured in `docs/perf-note.md`).
 Errors: 404 hotel not found.
 
 ### New: `GET /api/hotels/{id}/spot-checks`
@@ -144,7 +145,7 @@ Request: `{ "changedByUserId": 2 }`. Caller must be a Supervisor (403 otherwise)
 
 ### New: `PUT /api/hotels/{id}/floor-assignments`
 Request: `{ "changedByUserId": 2, "assignments": [ { "floor": 2, "housekeeperUserId": 5 } ] }`.
-Response 200: the full assignment list for the hotel. Replaces the floor owner for each floor sent (BR-17).
+Response 200: the full assignment list for the hotel. Replaces the floor owner for each floor sent (BR-17). All floors in one request are written in one database transaction: if any floor cannot be written, none changes (phase 6). Every assignee is checked before anything is written, so a bad user returns 422 with no change.
 Errors: 400 floor outside 0 to 60 (matches existing room validator) or missing user id; 403 caller not a Supervisor; 404 hotel or user not found; 422 user is not an active Housekeeper at this hotel.
 
 ### New: `GET /api/hotels/{id}/floor-assignments`
