@@ -17,6 +17,8 @@ npm install
 npm run dev
 ```
 
-API: http://localhost:5080/swagger - UI: http://localhost:5173 - Tests: `cd backend && dotnet test`
+API: http://localhost:5080/swagger (Development only) - UI: http://localhost:5173 - Tests: `cd backend && dotnet test`
 
 MySQL on another host or port: set the environment variable `ConnectionStrings__Larchmont` to a full connection string (server, port, database, user, password) before starting the API. The existing tests use an in-memory database and do not need MySQL.
+
+`docker compose up` reads `MYSQL_ROOT_PASSWORD` from your shell (or a gitignored `.env` next to `compose.yaml`) and refuses to start without it. No password is stored in the repository.

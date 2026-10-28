@@ -2,7 +2,7 @@ services:
   mysql:
     image: mysql:8.4
     environment:
-      MYSQL_ROOT_PASSWORD: Lm_root_2026!
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in your shell or a gitignored .env}
       MYSQL_DATABASE: larchmont
     ports:
       - "3306:3306"
