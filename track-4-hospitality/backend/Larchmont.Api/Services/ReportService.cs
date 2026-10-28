@@ -41,7 +41,8 @@ public class ReportService : IReportService
         var days = new List<OccupancyDayDto>();
         for (var day = from; day <= to; day = day.AddDays(1))
         {
-            var sold = bookings.Count(b => b.CheckIn <= day && day <= b.CheckOut);
+            // LH-56: a guest sleeps the nights from CheckIn up to, not including, CheckOut.
+            var sold = bookings.Count(b => b.CheckIn <= day && day < b.CheckOut);
             days.Add(new OccupancyDayDto(day, sold));
         }
 
