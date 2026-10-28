@@ -64,8 +64,11 @@ if (!app.Environment.IsEnvironment("Testing"))
 
 app.UseExceptionHandler();
 app.UseCors();
-app.UseSwagger();
-app.UseSwaggerUI();
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 app.MapControllers();
 app.Run();
 
