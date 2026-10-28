@@ -56,7 +56,7 @@ public class BookingRepository : IBookingRepository
     public Task<List<Booking>> ListOverlappingAsync(int? hotelId, DateOnly from, DateOnly to)
     {
         var staying = BookingStatuses.Staying;
-        var q = _db.Bookings.Where(b => staying.Contains(b.Status) && b.CheckIn <= to && b.CheckOut >= from);
+        var q = _db.Bookings.Where(b => staying.Contains(b.Status) && b.CheckIn <= to && b.CheckOut > from);
         if (hotelId.HasValue) q = q.Where(b => b.HotelId == hotelId);
         return q.ToListAsync();
     }
