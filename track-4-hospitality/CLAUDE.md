@@ -38,6 +38,7 @@ Paths below are relative to this folder (`track-4-hospitality/`), which holds `.
 - Migrations: never edit V001 to V005. The next file is V006. See `.claude/rules/migrations.md`.
 
 ## Known issues
-- CI (`.github/workflows/ci.yml`) is broken: it installs .NET 6 (project is net8.0) and uses `working-directory: web` (the folder is `frontend`). Not fixed yet.
-- Committed credentials exist in `backend/Larchmont.Api/appsettings.Development.json`, and a root password is in `compose.yaml`. Do not copy them. They need rotating and moving to environment variables.
+- CI (`.github/workflows/ci.yml`) now uses .NET 8 and `frontend`, but has not run on GitHub yet.
+- `compose.yaml` reads `MYSQL_ROOT_PASSWORD` from the environment (fixed). Committed credentials still exist in `backend/Larchmont.Api/appsettings.Development.json` and `db-setup/01-create-users.sql`, and all old ones are in git history. Do not copy them. They need rotating, moving to environment variables, and a history purge. See `docs/review-report.md`.
+- Swagger is enabled only in the Development environment.
 - Tests have no `Category` traits, so filters such as `--filter Category=Unit` select nothing.
