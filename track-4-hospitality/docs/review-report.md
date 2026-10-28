@@ -10,6 +10,43 @@ Branch `feature/housekeeping-board` against `main`. Two read-only agents (review
 | `compose.yaml` held a root password literal | It now reads `MYSQL_ROOT_PASSWORD` from the environment and refuses to start without it. README says so. |
 | Swagger on in every environment (security 4) | `Program.cs` enables Swagger only when the environment is Development. `dotnet run` uses the Development profile, so the README link still works. |
 
+## The failing CI run (`docs/ci-failing-run.log`), explained and fixed
+
+The log has two separate failures, both from `ci.yml` not matching the repo:
+1. Backend job: `actions/setup-dotnet` installed SDK 6.0.428, and `dotnet restore` stopped with `NETSDK1045: The current .NET SDK does not support targeting .NET 8.0`. The projects target `net8.0`. Fix: `dotnet-version: '8.0.x'`.
+2. Frontend job: `An error occurred trying to start process '/usr/bin/bash' with working directory '.../web'. No such file or directory`. The folder is `frontend`, not `web`. Fix: `working-directory: frontend` on both steps.
+
+A third change adds a job that runs the MCP tests (`dotnet test Larchmont.Mcp.sln` in `mcp/`; 95 pass locally with no database and no environment variables).
+
+Limits: the fixed workflow has not run on GitHub. Also, GitHub only runs workflows from `.github/workflows` at the repository root. In this repository the track is a subfolder (`track-4-hospitality/`), so this file is not picked up here; it works when the track folder is the repository root, as in the failing log (`.../larchmont/larchmont/web`). The same build, test and `npm run build` commands pass locally.
+
+## Review checklist (`docs/review-checklist.md`) result
+
+Pass means checked by the orchestrator or an agent in this project; Open points to a finding below. Items marked "not verified" were not checked.
+
+| Area | Item | Result |
+|---|---|---|
+| Correctness | Spec ACs each have a test | Pass: 45 ACs, each with an `AC_nn_` test (`docs/test-report.md`); AC-03 and AC-20 only partly asserted |
+| Correctness | Business rules in the service layer | Pass (reviewer: no service uses the DbContext; rules in services) |
+| Correctness | Invalid input returns a clear 4xx, never a 500 | Open: R4 and R5 can return 500 on concurrent writes |
+| Correctness | Date and night counting at the edges | Pass after LH-56 (`docs/debug-report.md`); lock `checkedOutAt` lower bound is open (R6) |
+| Correctness | Tests reliable and repeatable | Pass: 201 backend tests pass on repeated runs in this project (a clock abstraction, `IClock`, is used); dependence on the real date was not audited |
+| Data | Schema changes are new migrations | Pass: V005 is new, V001 to V004 untouched; V006 still needed for R11 |
+| Data | Migration and EF model agree | Open: DATETIME(0) vs datetime(6) (`docs/perf-note.md`), room status default (R11) |
+| Data | List endpoints run a fixed number of queries | Pass: measured on MySQL scratch (`docs/perf-note.md`); orchestrator did not repeat the measurement |
+| Data | Concurrent changes cannot both succeed silently | Partly: status change returns 409 (AC-39); R4, R5, R9 open |
+| Security | No secret committed | Fail: S1 and S2 (credentials in `01-create-users.sql`, `appsettings.Development.json`, git history); `compose.yaml` fixed |
+| Security | No response returns fields the caller does not need | Not verified beyond the MCP views (no personal columns) |
+| Security | Personal data shown only to roles that need it | Pass for MCP views; API roles rest on a trusted `changedByUserId` (S3) |
+| Security | Staff tracking has a lawful purpose | Pass: spec states that off-clock location tracking is not built |
+| Tests | Each test fails if the behaviour is broken | Partly: 8-rule mutation spot-check, 2 survivors killed (`docs/test-report.md`); not a full sweep |
+| Tests | No dependence on date, time zone or order | Not verified beyond reading |
+| Tests | New code has a test that fails on the old code | Pass for LH-56 and the importer (characterisation); others not checked |
+| Delivery | Build, test and `npm run build` pass | Pass locally for backend, MCP; frontend build passed in earlier phases, not re-run in phase 11 |
+| Delivery | CI matches the repo | Fixed, not run on GitHub (see above) |
+| Delivery | README and CLAUDE.md match how the project runs | Pass: updated in phase 10 and for the MCP launcher |
+| Delivery | Loading, empty and error states on new screens | Pass for the board and SLA breach list by code reading; not exercised in a browser in phase 11 |
+
 ## Needs a decision or an external action (not done)
 
 | # | Source | Finding | Why not done |
