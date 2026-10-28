@@ -67,9 +67,18 @@ public class BookingServiceTests
     [Fact]
     public async Task Create_WhenAdultsExceedRoomCapacity_IsRejected()
     {
+        // Every lookup the service makes before the capacity rule is set up. Previously the guest lookup
+        // returned null, so the test passed on NotFoundException and never reached the capacity check.
+        _guests.Setup(g => g.GetAsync(1)).ReturnsAsync(new Guest { Id = 1 });
+        _hotels.Setup(h => h.GetAsync(1)).ReturnsAsync(new Hotel { Id = 1 });
         _types.Setup(t => t.GetAsync(1)).ReturnsAsync(new RoomType { Id = 1, Name = "Standard Double", MaxOccupancy = 2 });
+        _rates.Setup(r => r.FindRateAsync(1, 1, 1, new DateOnly(2026, 11, 3))).ReturnsAsync(new RoomRate { NightlyRate = 95m });
         var request = new BookingRequest(1, 1, 1, 1, new DateOnly(2026, 11, 3), new DateOnly(2026, 11, 5), 5, null);
-        await Assert.ThrowsAnyAsync<Exception>(() => Sut().CreateAsync(request));
+
+        // Given 5 adults for a Standard Double (max 2). Then the capacity rule (422) refuses it, and nothing is saved.
+        var ex = await Assert.ThrowsAsync<BusinessRuleException>(() => Sut().CreateAsync(request));
+        Assert.Equal("Standard Double sleeps at most 2.", ex.Message);
+        _bookings.Verify(b => b.AddAsync(It.IsAny<Booking>()), Times.Never);
     }
 
     [Fact]

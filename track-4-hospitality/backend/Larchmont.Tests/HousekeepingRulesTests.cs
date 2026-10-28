@@ -7,7 +7,6 @@ namespace Larchmont.Tests;
 
 // Status moves, roles and concurrency through PUT /api/rooms/{id}/status (spec: Business rules
 // BR-01 to BR-11, BR-19; Acceptance Criteria AC-01 to AC-13, AC-39 to AC-41, AC-44).
-// Each test fails on purpose until the rules land; the failure is the missing behaviour.
 public class HousekeepingRulesTests
 {
     [Fact]
