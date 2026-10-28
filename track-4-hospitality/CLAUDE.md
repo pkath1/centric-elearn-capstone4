@@ -26,7 +26,7 @@ Paths below are relative to this folder (`track-4-hospitality/`), which holds `.
 - `backend/Larchmont.Api/Data/LarchmontDbContext.cs` - table and column mapping (snake_case)
 - `backend/Larchmont.Api/Validators`, `Dtos`, `Mappers`, `Infrastructure` (exceptions, password hashing)
 - `backend/db/migrations` - DbUp scripts V001 to V005 (applied; never edit). The next file is V006
-- `mcp/` - .NET stdio MCP server (`Larchmont.Mcp`, tests in `mcp/tests`); needs `LARCHMONT_MCP_CONNECTION`. Views in `db-setup/02-mcp-views.sql`, user in `db-setup/03-create-mcp-user.sql`, see `docs/mcp-security.md`
+- `mcp/` - .NET stdio MCP server (`Larchmont.Mcp`, tests in `mcp/tests`); launched by `mcp/run-mcp.sh`, which loads gitignored `mcp/.env` (copy `mcp/.env.example`; needs `LARCHMONT_MCP_CONNECTION` and `LARCHMONT_MCP_HOTEL_ID`). Views in `db-setup/02-mcp-views.sql`, user in `db-setup/03-create-mcp-user.sql`, see `docs/mcp-security.md`
 - `frontend/src` - `api/` (fetch helpers), `pages/`, `components/`, `hooks/`
 
 ## Conventions
