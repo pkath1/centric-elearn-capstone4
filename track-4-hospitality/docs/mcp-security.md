@@ -52,7 +52,7 @@ Database grants are the first line. The server guard is the second. Neither is t
 | C17 | Startup refuses to run without `LARCHMONT_MCP_CONNECTION` or `LARCHMONT_MCP_HOTEL_ID`, and refuses a `root` account | Server: `McpConfig` | Running with the wrong or an over-privileged account |
 | C18 | Secrets never printed: the connection string is redacted in `ToString()`, and errors name variables or exception types, never driver messages | Server: `McpConfig`, `QueryRunner` | Credentials in logs or in tool output |
 | C19 | stdout is reserved for the protocol. Logs go to stderr at Warning and above | Server: `Program.cs` | Log lines corrupting the protocol |
-| C20 | The connection string is never committed. `.mcp.json` passes variable names only (`${LARCHMONT_MCP_CONNECTION}`), so values come from the developer's environment | `.mcp.json`, environment | Secrets in the repository |
+| C20 | The connection string is never committed. `.mcp.json` holds no values; `mcp/run-mcp.sh` reads them from the gitignored `mcp/.env` | `.mcp.json`, environment | Secrets in the repository |
 | C21 | Fixed SQL for the four business tools. Clients never supply SQL there; the only client input is typed and bounded | Server: `HousekeepingTools` | Injection through the business tools |
 
 ## Deliberately not allowed
@@ -70,8 +70,8 @@ Database grants are the first line. The server guard is the second. Neither is t
    - Run `02-mcp-views.sql` with the hotel id substituted. The file must not be run unsubstituted (the placeholder `__MCP_HOTEL_ID__` is a syntax error): `sed "s/__MCP_HOTEL_ID__/1/g" db-setup/02-mcp-views.sql | mysql -h 127.0.0.1 -P 3306 -u ADMIN -p larchmont`. Use the hotel's `hotels.id` in place of `1`, and the same command with `larchmont_scratch` for the scratch copy.
    - Run `db-setup/03-create-mcp-user.sql` with the placeholders substituted at run time. The header of that file shows the Git Bash command. The password is read silently and never written to disk.
    - Check the grants: `SHOW GRANTS FOR 'larchmont_mcp'@'%';`
-2. On the developer machine, set environment variables (names as in `.mcp.json`):
-   - `LARCHMONT_MCP_CONNECTION`: a MySQL connection string for `larchmont_mcp`, set in the shell or the user's environment, never in a file in the repo.
+2. On the developer machine, copy `mcp/.env.example` to `mcp/.env` (gitignored; `mcp/run-mcp.sh` loads it) and set:
+   - `LARCHMONT_MCP_CONNECTION`: a MySQL connection string for `larchmont_mcp`, use the fixed password chosen in step 1. Only the gitignored `mcp/.env` holds it, never a tracked file.
    - `LARCHMONT_MCP_HOTEL_ID`: the same `hotels.id` used in step 1. It is written to the audit log only. It does not scope queries, so it must match the installed views.
 3. Start the server directly to check the settings: `dotnet run --project mcp/Larchmont.Mcp`. With no variables set, it prints the names of the missing variables and exits with code 2.
 4. Claude Code reads `.mcp.json` and starts the server over stdio.
