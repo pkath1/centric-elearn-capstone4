@@ -2,8 +2,8 @@
   "mcpServers": {
     "larchmont-db": {
       "type": "stdio",
-      "command": "bash",
-      "args": ["mcp/run-mcp.sh"]
+      "command": "cmd",
+      "args": ["/c", "mcp\\run-mcp.cmd"]
     }
   }
 }
