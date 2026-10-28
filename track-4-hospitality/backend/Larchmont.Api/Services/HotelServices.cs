@@ -1,5 +1,4 @@
 using FluentValidation;
-using FluentValidation.Results;
 using Larchmont.Api.Domain;
 using Larchmont.Api.Dtos;
 using Larchmont.Api.Infrastructure;
@@ -117,11 +116,14 @@ public class RoomService : IRoomService
     private readonly IBookingRepository _bookings;
     private readonly IUserRepository _users;
     private readonly IValidator<RoomRequest> _validator;
+    private readonly IValidator<RoomStatusRequest> _statusValidator;
+    private readonly IValidator<OutOfOrderRequest> _outOfOrderValidator;
     private readonly IRoomStatusPolicy _policy;
     private readonly IClock _clock;
 
     public RoomService(IRoomRepository rooms, IRoomTypeRepository types, IHotelRepository hotels,
         IBookingRepository bookings, IUserRepository users, IValidator<RoomRequest> validator,
+        IValidator<RoomStatusRequest> statusValidator, IValidator<OutOfOrderRequest> outOfOrderValidator,
         IRoomStatusPolicy policy, IClock clock)
     {
         _rooms = rooms;
@@ -130,6 +132,8 @@ public class RoomService : IRoomService
         _bookings = bookings;
         _users = users;
         _validator = validator;
+        _statusValidator = statusValidator;
+        _outOfOrderValidator = outOfOrderValidator;
         _policy = policy;
         _clock = clock;
     }
@@ -178,24 +182,30 @@ public class RoomService : IRoomService
         return await ToDtoAsync(room);
     }
 
-    public Task<RoomDto> SetStatusAsync(int id, RoomStatusRequest request) =>
-        ChangeStatusAsync(id, request.Status, request.ChangedByUserId, request.RowVersion, request.Reason, expectedReturn: null);
+    public async Task<RoomDto> SetStatusAsync(int id, RoomStatusRequest request)
+    {
+        // An unknown status is a 422 from the service (AC-40), so it is checked before the validator runs.
+        if (!RoomStatuses.All.Contains(request.Status))
+            throw new BusinessRuleException($"Status must be one of: {string.Join(", ", RoomStatuses.All)}.");
+        await _statusValidator.ValidateAndThrowAsync(request);
+        return await ChangeStatusAsync(id, request.Status, request.ChangedByUserId!.Value, request.RowVersion!.Value,
+            request.Reason, expectedReturn: null);
+    }
 
-    public Task<RoomDto> SetOutOfOrderAsync(int id, OutOfOrderRequest request) =>
-        ChangeStatusAsync(id, RoomStatuses.OutOfOrder, request.ChangedByUserId, request.RowVersion, request.Reason, request.ExpectedReturn);
+    public async Task<RoomDto> SetOutOfOrderAsync(int id, OutOfOrderRequest request)
+    {
+        await _outOfOrderValidator.ValidateAndThrowAsync(request);
+        return await ChangeStatusAsync(id, RoomStatuses.OutOfOrder, request.ChangedByUserId, request.RowVersion,
+            request.Reason, request.ExpectedReturn);
+    }
 
-    private async Task<RoomDto> ChangeStatusAsync(int id, string toStatus, int? changedByUserId, int? rowVersion,
+    private async Task<RoomDto> ChangeStatusAsync(int id, string toStatus, int changedByUserId, int rowVersion,
         string? reason, DateTime? expectedReturn)
     {
-        if (!RoomStatuses.All.Contains(toStatus))
-            throw new BusinessRuleException($"Status must be one of: {string.Join(", ", RoomStatuses.All)}.");
-        if (changedByUserId is null) throw Invalid("changedByUserId", "changedByUserId is required.");
-        if (rowVersion is null) throw Invalid("rowVersion", "rowVersion is required.");
-
         var room = await _rooms.GetAsync(id) ?? throw new NotFoundException($"Room {id} not found.");
-        var user = await _users.GetAsync(changedByUserId.Value)
+        var user = await _users.GetAsync(changedByUserId)
             ?? throw new NotFoundException($"User {changedByUserId} not found.");
-        if (rowVersion.Value != room.RowVersion)
+        if (rowVersion != room.RowVersion)
             throw new ConflictException($"Room {room.RoomNumber} changed. Reload and try again.");
 
         var from = room.Status;
@@ -264,9 +274,6 @@ public class RoomService : IRoomService
         }
         return await ToDtoAsync(room);
     }
-
-    private static ValidationException Invalid(string field, string message) =>
-        new(new[] { new ValidationFailure(field, message) });
 
     public async Task<RoomAvailabilityDto> GetAvailabilityAsync(int id, DateOnly from, DateOnly to)
     {

@@ -114,7 +114,8 @@ public class RoomStatusRequestValidator : AbstractValidator<RoomStatusRequest>
     {
         RuleFor(x => x.ChangedByUserId).NotNull().GreaterThan(0);
         RuleFor(x => x.RowVersion).NotNull().GreaterThan(0);
-        RuleFor(x => x.Reason).MaximumLength(255);
+        // Length is counted after trimming, as the policy does (BR-08).
+        RuleFor(x => x.Reason).Must(r => r is null || r.Trim().Length <= 255).WithMessage("Reason must be 255 characters or fewer.");
         When(x => x.Status == RoomStatuses.OutOfOrder, () =>
         {
             RuleFor(x => x.Reason).Must(r => !string.IsNullOrWhiteSpace(r)).WithMessage("Reason is required when status is OutOfOrder.");
@@ -128,7 +129,8 @@ public class OutOfOrderRequestValidator : AbstractValidator<OutOfOrderRequest>
     {
         RuleFor(x => x.ChangedByUserId).GreaterThan(0);
         RuleFor(x => x.RowVersion).GreaterThan(0);
-        RuleFor(x => x.Reason).Must(r => !string.IsNullOrWhiteSpace(r)).WithMessage("Reason is required.").MaximumLength(255);
+        RuleFor(x => x.Reason).Must(r => !string.IsNullOrWhiteSpace(r)).WithMessage("Reason is required.");
+        RuleFor(x => x.Reason).Must(r => r is null || r.Trim().Length <= 255).WithMessage("Reason must be 255 characters or fewer.");
     }
 }
 
@@ -166,7 +168,10 @@ public class LockCheckoutRequestValidator : AbstractValidator<LockCheckoutReques
 {
     public LockCheckoutRequestValidator()
     {
-        RuleFor(x => x.HotelId).GreaterThan(0);
-        RuleFor(x => x.RoomNumber).NotEmpty().MaximumLength(10);
+        RuleFor(x => x.HotelId).GreaterThan(0).WithMessage("hotelId must be greater than 0.");
+        // Trimmed, as the lookup is: a room number of only spaces is missing (BR-18).
+        RuleFor(x => x.RoomNumber)
+            .Must(r => !string.IsNullOrWhiteSpace(r) && r.Trim().Length <= 10)
+            .WithMessage("roomNumber is required and must be 10 characters or fewer.");
     }
 }

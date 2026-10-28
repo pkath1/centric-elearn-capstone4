@@ -18,6 +18,9 @@ public interface IHousekeepingBoardService
 public class HousekeepingBoardService : IHousekeepingBoardService
 {
     private const int ReadyByFallbackMinutes = 15;
+    // SLA breach list: a closed turnaround is considered only when it was checked out this many days ago or later.
+    // Open turnarounds are always considered. Keeps the breach query from scanning the whole history.
+    public const int SlaLookbackDays = 30;
     private static readonly string[] BusyStatuses = { RoomStatuses.Dirty, RoomStatuses.Cleaning };
 
     private readonly IHotelRepository _hotels;
@@ -116,7 +119,8 @@ public class HousekeepingBoardService : IHousekeepingBoardService
 
         var roomsById = (await _rooms.ListAsync(hotelId, null, null)).ToDictionary(r => r.Id);
         var typeNames = await TypeNamesAsync();
-        var turnarounds = await _turnarounds.ListForHotelAsync(hotelId);
+        // Open turnarounds, plus closed ones checked out within SlaLookbackDays (see docs/specs/housekeeping-board.md).
+        var turnarounds = await _turnarounds.ListForHotelAsync(hotelId, now.AddDays(-SlaLookbackDays));
 
         var breaches = new List<(SlaBreachDto Item, string RoomNumber)>();
         foreach (var t in turnarounds)
@@ -285,8 +289,9 @@ public class FloorAssignmentService : IFloorAssignmentService
                 throw new BusinessRuleException($"User {item.HousekeeperUserId} does not work at hotel {hotelId}.");
         }
 
-        foreach (var item in request.Assignments)
-            await _assignments.ReplaceActiveAsync(hotelId, item.Floor, item.HousekeeperUserId);
+        // All floors in one repository call, which writes them in one transaction (all or nothing).
+        await _assignments.ReplaceActiveForFloorsAsync(hotelId,
+            request.Assignments.Select(a => (a.Floor, a.HousekeeperUserId)).ToList());
 
         return await ActiveListAsync(hotelId);
     }
