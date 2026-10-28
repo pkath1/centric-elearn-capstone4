@@ -236,11 +236,19 @@ public class HousekeepingApiTests
         using var f = new HousekeepingFactory();
         f.SeedHousekeeping(NewRoom(101, "101", 1, RoomStatuses.Ready));
 
-        // Given no room "999" at hotel 1. When the lock webhook is called for it with a valid key.
+        // Given no room "999" at hotel 1 (room 101 exists and is Ready). When the lock webhook is called for "999" with a valid key.
         var response = await LockCheckout(f.CreateClient(), HousekeepingFactory.LockKey, new { hotelId = 1, roomNumber = "999" });
 
-        // Then 404.
+        // Then 404 with ProblemDetails Detail "Room 999 not found at hotel 1." (current wording of LockIntegrationService).
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("Room 999 not found at hotel 1.", (await Json(response)).GetProperty("detail").GetString());
+
+        // No change: room 101 is still Ready at rowVersion 1, and no turnaround or status history row was written.
+        var room = f.Query(db => db.Rooms.Single(r => r.Id == 101));
+        Assert.Equal(RoomStatuses.Ready, room.Status);
+        Assert.Equal(1, room.RowVersion);
+        Assert.Equal(0, f.Query(db => db.RoomTurnarounds.Count()));
+        Assert.Equal(0, f.Query(db => db.RoomStatusHistory.Count()));
     }
 
     [Fact]

@@ -324,13 +324,47 @@ public class HousekeepingBoardTests
     public async Task AC_32_BoardUnknownHotelIs404()
     {
         using var f = new HousekeepingFactory();
-        f.SeedHousekeeping();
+        f.SeedHousekeeping(NewRoom(101, "101", 1, RoomStatuses.Ready));
+        var client = f.CreateClient();
 
-        // Given no hotel with id 999. When the board is read.
-        var response = await f.CreateClient().GetAsync("/api/hotels/999/board");
+        // Given no hotel with id 999 (hotel 1 and its room 101 exist). When the board is read.
+        var response = await client.GetAsync("/api/hotels/999/board");
 
-        // Then 404.
+        // Then 404 with ProblemDetails Detail "Hotel 999 not found." (current wording of EnsureHotelAsync;
+        // the spec only says 404), and no board body is returned.
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await Json(response);
+        Assert.Equal("Hotel 999 not found.", body.GetProperty("detail").GetString());
+        Assert.False(body.TryGetProperty("floors", out _));
+        Assert.False(body.TryGetProperty("busiestFloor", out _));
+
+        // A read changes nothing: room 101 is still Ready, at rowVersion 1, with no status history.
+        var room = f.Query(db => db.Rooms.Single(r => r.Id == 101));
+        Assert.Equal(RoomStatuses.Ready, room.Status);
+        Assert.Equal(1, room.RowVersion);
+        Assert.Equal(0, f.Query(db => db.RoomStatusHistory.Count()));
+    }
+
+    // BR-22: ties go to the lower floor. AC-31 has no tie, so this is the only check of the tie-break.
+    [Fact]
+    public async Task Board_BusiestFloorTie_GoesToLowerFloor()
+    {
+        using var f = new HousekeepingFactory();
+        f.SeedHousekeeping(
+            NewRoom(101, "101", 1, RoomStatuses.Dirty), NewRoom(102, "102", 1, RoomStatuses.Cleaning),
+            NewRoom(103, "103", 1, RoomStatuses.Ready),
+            NewRoom(201, "201", 2, RoomStatuses.Dirty), NewRoom(202, "202", 2, RoomStatuses.Dirty),
+            NewRoom(203, "203", 2, RoomStatuses.Ready));
+
+        // Given floor 1 and floor 2 each have two rooms in Dirty or Cleaning.
+        var body = await Json(await f.CreateClient().GetAsync("/api/hotels/1/board"));
+
+        // Then busiestFloor is 1, and only floor 1 has busy true.
+        Assert.Equal(1, body.GetProperty("busiestFloor").GetInt32());
+        var busy = body.GetProperty("floors").EnumerateArray()
+            .ToDictionary(x => x.GetProperty("floor").GetInt32(), x => x.GetProperty("busy").GetBoolean());
+        Assert.True(busy[1]);
+        Assert.False(busy[2]);
     }
 
     [Fact]
